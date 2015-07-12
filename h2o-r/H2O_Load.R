@@ -20,7 +20,12 @@ src()
 
 
 conn <- h <- h2o.init("localhost", 54321, strict_version_check=F)
-hex <- as.h2o(iris)
+iris.hex <- hex <- as.h2o(iris)
+hidden_layers <- list(c(20, 20), c(50, 50, 50))
+hyper_params = list(hidden = hidden_layers)
+hyper_params = list(loss = c("MeanSquare", "CrossEntropy"))
+hh <- h2o.grid("deeplearning", x=1:4, y=5, training_frame=iris.hex, loss = "CrossEntropy", hyper_params = hyper_params)
+
 hyper_parameters = list("ntrees" = c(1, 5), "learn_rate" = c(0.1, 0.01))
 g <- h2o.grid("gbm", grid_id="XXX", x=c(1:4), y = 5, training_frame=hex, hyper_params = hyper_parameters)
 

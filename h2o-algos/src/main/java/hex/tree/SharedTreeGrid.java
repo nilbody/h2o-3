@@ -16,25 +16,9 @@ public abstract class SharedTreeGrid<P extends SharedTreeModel.SharedTreeParamet
 
   @Override protected String modelName() { return MODEL_NAME; }
 
-  protected static final String[] HYPER_NAMES    = new String[] {"_ntrees", "_max_depth", "_min_rows", "_nbins" };
+  protected static final String[] HYPER_NAMES    = new String[] {"ntrees", "max_depth", "min_rows", "nbins" };
   protected static final double[] HYPER_DEFAULTS = new double[] {    50   ,       5     ,     10     ,    20    };
 
   // Factory for returning a grid based on an algorithm flavor
-  protected SharedTreeGrid( Key key, Frame fr ) { super(key,fr); }
-
-  @Override
-  protected P applyHypers(P parms, double[] hypers) {
-    parms._ntrees = (int)hypers[0];
-    parms._max_depth = (int)hypers[1];
-    parms._min_rows = (int)hypers[2];
-    parms._nbins = (int)hypers[3];
-    return parms;
-  }
-
-  protected void getHypers( SharedTreeModel.SharedTreeParameters parms, double[] hypers ) {
-    hypers[0] = parms._ntrees;
-    hypers[1] = parms._max_depth;
-    hypers[2] = parms._min_rows;
-    hypers[3] = parms._nbins;
-  }
+  protected SharedTreeGrid( Key key, Frame fr, P params, String[] hyperNames ) { super(key, fr, params, hyperNames); }
 }

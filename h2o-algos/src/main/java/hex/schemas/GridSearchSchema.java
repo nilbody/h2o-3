@@ -1,15 +1,14 @@
-package hex;
+package hex.schemas;
 
 import com.google.gson.Gson;
+import hex.Grid;
+import hex.Model;
 import water.H2O;
-import water.api.API;
-import water.api.JobV3;
-import water.api.ModelParametersSchema;
-import water.api.Schema;
+import water.Key;
+import water.api.*;
 import water.util.IcedHashMap;
 import water.util.ReflectionUtils;
 
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Properties;
@@ -36,11 +35,14 @@ public /* FIXME: abstract */ class GridSearchSchema<G extends Grid<MP, G>,
   //
   // Inputs
   //
-  @API(help="Basic model builder parameters.")
+  @API(help="Basic model builder parameters.", direction = API.Direction.INPUT)
   public P parameters;
 
-  @API(help="Grid search parameters.")
-  public IcedHashMap<String, Object[]> grid_parameters;
+  @API(help="Grid search parameters.", direction = API.Direction.INOUT)
+  public IcedHashMap<String, Object[]> hyper_parameters;
+
+  @API(help="Destination id for this grid; auto-generated if not specified", required = false, direction=API.Direction.INOUT)
+  public KeyV3.GridKeyV3 grid_id;
 
   //
   // Outputs
@@ -54,10 +56,15 @@ public /* FIXME: abstract */ class GridSearchSchema<G extends Grid<MP, G>,
   @Override
   public S fillFromParms(Properties parms) {
     // FIXME: do this in generic way
-    if (parms.containsKey("grid_parameters")) {
-      String parameters = parms.getProperty("grid_parameters");
-      grid_parameters = parseJsonMap(parameters, new IcedHashMap<String, Object[]>());
-      parms.remove("grid_parameters");
+    if (parms.containsKey("hyper_parameters")) {
+      String parameters = parms.getProperty("hyper_parameters");
+      hyper_parameters = parseJsonMap(parameters, new IcedHashMap<String, Object[]>());
+      parms.remove("hyper_parameters");
+    }
+
+    if (parms.containsKey("grid_id")) {
+      grid_id = new KeyV3.GridKeyV3(Key.<Grid>make(parms.getProperty("grid_id")));
+      parms.remove("grid_id");
     }
 
     this.parameters.fillFromParms(parms);
@@ -81,24 +88,23 @@ public /* FIXME: abstract */ class GridSearchSchema<G extends Grid<MP, G>,
 
     // special case, because GridSearchSchema is the top of the tree and is parameterized differently
     if (GridSearchSchema.class == this.getClass()) {
-      return (P)new ModelParametersSchema();
+      return (P) new ModelParametersSchema();
     }
 
     try {
       Class<? extends ModelParametersSchema> parameters_class = (Class<? extends ModelParametersSchema>) ReflectionUtils.findActualClassParameter(this.getClass(), 3);
-      impl = (P)parameters_class.newInstance();
-    }
-    catch (Exception e) {
+      impl = (P) parameters_class.newInstance();
+    } catch (Exception e) {
       throw H2O.fail("Caught exception trying to instantiate a builder instance for ModelBuilderSchema: " + this + ": " + e, e);
     }
     return impl;
   }
 
   // this method right now using gson
-  // It parse given json, and
+  // It parses given json, and produces Map<String, Object[]>
   public static <T extends Map<String, Object[]>> T parseJsonMap(String json, T map) {
     Gson gson = new Gson();
-    Map<String, Object> m = new HashMap<String, Object>();
+    Map<String, Object> m;
     m = gson.fromJson(json, map.getClass());
     for (Map.Entry<String, Object> e : m.entrySet()) {
       if (e.getValue() instanceof List) {

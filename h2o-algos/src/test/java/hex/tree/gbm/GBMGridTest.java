@@ -5,11 +5,15 @@ import hex.Grid;
 import hex.Model;
 
 import java.util.*;
+
+import org.codehaus.groovy.runtime.ArrayUtil;
 import org.junit.*;
 import water.DKV;
+import water.Key;
 import water.TestUtil;
 import water.fvec.Frame;
 import water.fvec.Vec;
+import water.util.ArrayUtils;
 
 import static org.junit.Assert.assertTrue;
 
@@ -27,13 +31,10 @@ public class GBMGridTest extends TestUtil {
       fr.add("cylinders",old.toEnum()); // response to last column
       DKV.put(fr);
 
-      // Get the Grid for this modeling class and frame
-      gbmg = GBMGrid.get(fr);
-
       // Setup hyperparameter search space
       HashMap<String,Object[]> hyperParms = new HashMap<>();
-      hyperParms.put("_ntrees",new Integer[]{5,10});
-      hyperParms.put("_distribution",new Distribution.Family[] {Distribution.Family.multinomial});
+      hyperParms.put("_ntrees", new Integer[] {1, 2});
+      hyperParms.put("_distribution",new Distribution.Family[] { Distribution.Family.multinomial });
       hyperParms.put("_max_depth",new Integer[]{1,2,5});
       hyperParms.put("_learn_rate",new Float[]{0.01f,0.1f,0.3f});
 
@@ -41,15 +42,20 @@ public class GBMGridTest extends TestUtil {
       GBMModel.GBMParameters params = new GBMModel.GBMParameters();
       params._train = fr._key;
       params._response_column = "cylinders";
+      // Get the Grid for this modeling class and frame
+      gbmg = GBMGrid.get(Key.<Grid>make("gbm_grid"), fr, params, hyperParms);
       Grid.GridSearch gs = gbmg.startGridSearch(params, hyperParms);
-      Grid g2 = (Grid)gs.get();
-      assert g2==gbmg;
+      Grid g2 = (Grid) gs.get();
+      assert g2 == gbmg;
 
       // Print out the models from this grid search
       Model[] ms = gs.models();
       for( Model m : ms ) {
-        GBMModel gbm = (GBMModel)m;
-        System.out.println(gbm._output._scored_train[gbm._output._ntrees]._mse + " " + Arrays.toString(g2.getHypers(gbm._parms)));
+        GBMModel gbm = (GBMModel) m;
+        System.out.println(gbm._output._scored_train[gbm._output._ntrees]._mse + " " +
+                           Arrays.deepToString(
+                               ArrayUtils.zip(g2.getHyperNames(), g2.getHyperValues(gbm._parms))));
+        // FIXME verify that it is a model matching the hyper space
       }
 
     } finally {
@@ -59,7 +65,8 @@ public class GBMGridTest extends TestUtil {
     }
   }
 
-  @Ignore("PUBDEV-1643")
+  //@Ignore("PUBDEV-1643")
+  @Test
   public void testDuplicatesCarsGrid() {
     GBMGrid gbmg = null;
     Frame fr = null;
@@ -70,9 +77,6 @@ public class GBMGridTest extends TestUtil {
       old = fr.remove("economy");
       fr.add("economy", old); // response to last column
       DKV.put(fr);
-
-      // Get the Grid for this modeling class and frame
-      gbmg = GBMGrid.get(fr);
 
       // Setup random hyperparameter search space
       HashMap<String, Object[]> hyperParms = new HashMap<>();
@@ -85,15 +89,21 @@ public class GBMGridTest extends TestUtil {
       GBMModel.GBMParameters params = new GBMModel.GBMParameters();
       params._train = fr._key;
       params._response_column = "economy";
+
+      // Get the Grid for this modeling class and frame
+      gbmg = GBMGrid.get(Key.<Grid>make("gbm_grid"), fr, params, hyperParms);
       Grid.GridSearch gs = gbmg.startGridSearch(params, hyperParms);
       Grid g2 = (Grid) gs.get();
       assert g2 == gbmg;
 
       // Check that duplicate model have not been constructed
-      Integer numModels = gs.models().length;
-      System.out.println("Grid consists of " + numModels + " models");
-      assertTrue(numModels==1);
-
+      Model[] models = gs.models();
+      assertTrue("Number of returned models has to be > 0", models.length > 0);
+      // But all off them should be same
+      Key<Model> modelKey = models[0]._key;
+      for (Model m : models) {
+        assertTrue("Number of constructed models has to be equal to 1", modelKey == m._key);
+      }
     } finally {
       if (old != null) old.remove();
       if (fr != null) fr.remove();
@@ -101,7 +111,8 @@ public class GBMGridTest extends TestUtil {
     }
   }
 
-  @Ignore("PUBDEV-1648")
+  //@Ignore("PUBDEV-1648")
+  @Test
   public void testRandomCarsGrid() {
     GBMGrid gbmg = null;
     GBMModel gbmRebuilt = null;
@@ -114,9 +125,6 @@ public class GBMGridTest extends TestUtil {
 
       fr.add("economy (mpg)", old); // response to last column
       DKV.put(fr);
-
-      // Get the Grid for this modeling class and frame
-      gbmg = GBMGrid.get(fr);
 
       // Setup random hyperparameter search space
       HashMap<String, Object[]> hyperParms = new HashMap<>();
@@ -163,6 +171,8 @@ public class GBMGridTest extends TestUtil {
       GBMModel.GBMParameters params = new GBMModel.GBMParameters();
       params._train = fr._key;
       params._response_column = "economy (mpg)";
+      // Get the Grid for this modeling class and frame
+      gbmg = GBMGrid.get(Key.<Grid>make("gbm_grid"), fr, params, hyperParms);
       Grid.GridSearch gs = gbmg.startGridSearch(params, hyperParms);
       Grid g2 = (Grid) gs.get();
       assert g2 == gbmg;

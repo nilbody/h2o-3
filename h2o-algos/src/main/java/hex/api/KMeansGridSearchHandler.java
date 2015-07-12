@@ -1,11 +1,14 @@
 package hex.api;
 
-import hex.GridSearchHandler;
+import hex.Grid;
 import hex.kmeans.KMeansGrid;
 import hex.kmeans.KMeansModel;
 import hex.schemas.KMeansGridSearchV99;
 import hex.schemas.KMeansV3;
+import water.Key;
 import water.fvec.Frame;
+
+import java.util.Map;
 
 /**
  * A specific handler for GBM grid search.
@@ -23,7 +26,7 @@ public class KMeansGridSearchHandler extends GridSearchHandler<KMeansGrid,
   }
 
   @Override
-  protected KMeansGrid createGrid(Frame f) {
-    return KMeansGrid.get(f);
+  protected KMeansGrid createGrid(Key<Grid> destKey, Frame f, KMeansModel.KMeansParameters params, Map<String,Object[]> hyperParams) {
+    return KMeansGrid.get(destKey, f, params, hyperParams);
   }
 }

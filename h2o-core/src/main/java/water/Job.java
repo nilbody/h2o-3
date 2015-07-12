@@ -164,7 +164,7 @@ public class Job<T extends Keyed> extends Keyed {
     }
   }
 
-  protected Job(Key<T> jobKey, Key<T> dest, String desc) {
+  private Job(Key<T> jobKey, Key<T> dest, String desc) {
     super(jobKey);
     _description = desc;
     _dest = dest;
