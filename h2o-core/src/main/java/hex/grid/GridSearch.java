@@ -45,21 +45,8 @@ public final class GridSearch<MP extends Model.Parameters> extends Job<Grid> {
     _modelFactory = modelFactory;
     _hyperSpaceWalker = hyperSpaceWalker;
 
-    // Count of models in this search
-/*      _totalModels = computeSizeOfHyperSpace();
-    _hyperParamNames = hyperParams.keySet().toArray(new String[]{});
-    assert _hyperParamNames.length
-           == _hyper_names.length : "Something is wrong with number of gridable parameters";
-*/
-    // Check all parameter combos for validity
-    /* FIXME
-    double[] hypers = new double[_hyperSearch.length];
-    // FIXME: this expect finite space!
-    for( int[] hidx = new int[_hyperSearch.length]; hidx != null; hidx = nextModel(hidx) ) {
-      ModelBuilder mb = getBuilder(params, hypers(hidx,hypers));
-      if( mb.error_count() > 0 )
-        throw new IllegalArgumentException(mb.validationErrors());
-    }*/
+    // Note: do not validate parameters of created model builders here
+    // Leave it to launch time, and just mark the build failed
   }
 
   GridSearch start() {

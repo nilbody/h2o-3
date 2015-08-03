@@ -34,11 +34,11 @@ import water.util.PojoUtils;
  * double value internally.
  *
  * @param <MP> type of model build parameters
- * @param <G>  self-type of actual Grid implementation
  */
 // FIXME should be abstract but REST API layer requires not abstract
 // FIXME should follow model build structure with INPUT and OUTPUT
 // FIXME vyzkouset grid search for Deep Learning
+// FIXME failed models should be represented in grid?
 public class Grid<MP extends Model.Parameters>
     extends Lockable<Grid<MP>> {
 
@@ -117,7 +117,6 @@ public class Grid<MP extends Model.Parameters>
   }
 
   public Key<Model> getModelKey(MP params) {
-    System.err.println("get model: " + params.checksum());
     long checksum = params.checksum();
     Key<Model> mKey = _cache.get(IcedLong.valueOf(checksum));
     return mKey;
@@ -126,7 +125,6 @@ public class Grid<MP extends Model.Parameters>
   /* FIXME:  should pass model parameters instead of checksum, but model
    * parameters are not imutable and model builder modifies them! */
   Key<Model> putModel(long checksum, Key<Model> modelKey) {
-    System.err.println("put model: " + checksum);
     return _cache.put(IcedLong.valueOf(checksum), modelKey);
   }
 
