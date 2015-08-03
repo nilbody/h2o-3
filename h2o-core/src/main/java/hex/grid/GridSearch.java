@@ -18,9 +18,59 @@ import water.util.PojoUtils;
  * Grid search job.
  *
  * This job triggers sub-jobs for each point in hyper space. It produces <code>Grid</code> which
- * contains a list of build models.
+ * contains a list of build models. A triggered job can fail!
  *
- * FIXME: should be driver which is passed to job as H2OCountedCompleter
+ * Grid search is parametrized by:
+ * <ul>
+ *   <li>model factory ({@link hex.grid.ModelFactory}) defines model build process</li>
+ *   <li>hyper space walk strategy ({@link hex.grid.HyperSpaceWalker} defines how the space of
+ *   hyper parameters is traversed</li>
+ * </ul>
+ *
+ * The job is started by the <code>startGridSearch</code> method which
+ * create a new grid search, put representation of Grid into distributed KV store,
+ * and for each parameter in hyper space of possible parameters, it launches a separated
+ * model building job. The launch of jobs is sequential and blocking. So
+ * after finish the last model, whole grid search job is done as well.
+ *
+ * By default, the grid search invokes cartezian grid search, but it can be modified
+ * by passing explicit hyper space walk strategy via the {@link #startGridSearch(ModelFactory, HyperSpaceWalker)} method.
+ *
+ * If any of forked jobs fails then the failure is ignored, and grid search
+ * normally continue in traversing the hyper space.
+ *
+ * Typical usage from Java is:
+ * <pre>
+ * {@code
+ * // Create initial parameters and fill them by references to data
+ * GBMModel.GBMParameters params = new GBMModel.GBMParameters();
+ * params._train = fr._key;
+ * params._response_column = "cylinders";
+ *
+ * // Define hyper-space to search
+ * HashMap<String,Object[]> hyperParms = new HashMap<>();
+ * hyperParms.put("_ntrees", new Integer[]{1, 2});
+ * hyperParms.put("_distribution",new Distribution.Family[] {Distribution.Family.multinomial});
+ * hyperParms.put("_max_depth",new Integer[]{1,2,5});
+ * hyperParms.put("_learn_rate",new Float[]{0.01f,0.1f,0.3f});
+ *
+ * // Launch grid search job creating GBM models
+ * GridSearch gridSearchJob = GridSearch.startGridSearch(params, hyperParms, GBM_MODEL_FACTORY);
+ *
+ * // Block till the end of the job and get result
+ * Grid grid = gridSearchJob.get()
+ *
+ * // Get built models
+ * Model[] models = grid.getModels()
+ *   }
+ * </pre>
+ *
+ * @see hex.grid.ModelFactory
+ * @see hex.grid.HyperSpaceWalker
+ * @see #startGridSearch(ModelFactory, HyperSpaceWalker)
+ *
+ * FIXME: this class should be driver which is passed to job as H2OCountedCompleter. Will be refactored as part of Job refactoring.
+ * FIXME: the failed job should be somehow reported to user in result Grid object
  */
 public final class GridSearch<MP extends Model.Parameters> extends Job<Grid> {
 
@@ -45,8 +95,8 @@ public final class GridSearch<MP extends Model.Parameters> extends Job<Grid> {
     _modelFactory = modelFactory;
     _hyperSpaceWalker = hyperSpaceWalker;
 
-    // Note: do not validate parameters of created model builders here
-    // Leave it to launch time, and just mark the build failed
+    // Note: do not validate parameters of created model builders here!
+    // Leave it to launch time, and just mark the corresponding model builder job as failed.
   }
 
   GridSearch start() {
@@ -106,7 +156,13 @@ public final class GridSearch<MP extends Model.Parameters> extends Job<Grid> {
     return ms;
   } */
 
-  // Classic grid search over hyper-parameter space
+  /**
+   * Invokes grid search based on specified hyper space walk strategy.
+   *
+   * It updates passed grid object in distributed store.
+   *
+   * @param grid  grid object to save results
+   */
   private void gridSearch(Grid<MP> grid) {
     // FIXME: grid should be locked and unlocked at the end
     MP params = null;
@@ -129,11 +185,16 @@ public final class GridSearch<MP extends Model.Parameters> extends Job<Grid> {
     }
   }
 
-  /**
-   * @param hypers A set of hyper parameter values
-   * @return A model run with these parameters, typically built on demand and cached - expected to
+  /** Build a model based on specified parameters and save it to resulting Grid object.
+   *
+   * Returns a model run with these parameters, typically built on demand and cached - expected to
    * be an expensive operation.  If the model in question is "in progress", a 2nd build will NOT be
    * kicked off. This is a blocking call.
+   *
+   * If new
+   *
+   * @param params  parameters for a new model
+   * @return  return a new model if it does not exist
    */
   private Model buildModel(final MP params, Grid<MP> grid) {
     // Make sure that the model is not yet built (can be case of duplicated hyper parameters)

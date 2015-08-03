@@ -22,6 +22,8 @@ check.deeplearning.gridlayers <- function(conn) {
   # Check expected number of models
   expect_equal(length(hh_models), 2)
 
+  # FIXME
+
   #hh_params <- lapply(hh@model, function(x) { x@model$params$hidden })
   #expect_equal(length(hh_params), length(hidden_layers))
   #expect_true(all(hh_params %in% hidden_layers))
