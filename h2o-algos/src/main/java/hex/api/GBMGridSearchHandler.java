@@ -10,7 +10,7 @@ import hex.tree.gbm.GBMModel;
 /**
  * A specific handler for GBM grid search.
  */
-public class GBMGridSearchHandler extends GridSearchHandler<Grid<GBMModel.GBMParameters>,
+public class GBMGridSearchHandler extends GridSearchHandler<GBMGridSearchHandler.GBMGrid,
     GBMGridSearchV99,
     GBMModel.GBMParameters,
     GBMV3.GBMParametersV3> {
@@ -25,5 +25,16 @@ public class GBMGridSearchHandler extends GridSearchHandler<Grid<GBMModel.GBMPar
   @Override
   protected ModelFactory<GBMModel.GBMParameters> getModelFactory() {
     return ModelFactories.GBM_MODEL_FACTORY;
+  }
+
+  // All usages of this class should be replaced by Grid<GBMModel.GBMParameters>
+  // However, current scheme system does not support it, so we have to create
+  // explicit class representing Grid<GBMModel.GBMParameters>.
+  @Deprecated
+  public static class GBMGrid extends Grid<GBMModel.GBMParameters> {
+
+    public GBMGrid() {
+      super(null, null, null, null);
+    }
   }
 }

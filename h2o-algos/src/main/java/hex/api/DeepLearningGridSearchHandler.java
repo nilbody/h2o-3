@@ -10,10 +10,11 @@ import hex.schemas.DeepLearningV3;
 /**
  * A specific handler for GBM grid search.
  */
-public class DeepLearningGridSearchHandler extends GridSearchHandler<Grid<DeepLearningParameters>,
-        DeepLearningGridSearchV99,
-        DeepLearningParameters,
-        DeepLearningV3.DeepLearningParametersV3> {
+public class DeepLearningGridSearchHandler
+    extends GridSearchHandler<DeepLearningGridSearchHandler.DeepLearningGrid,
+    DeepLearningGridSearchV99,
+    DeepLearningParameters,
+    DeepLearningV3.DeepLearningParametersV3> {
 
   /* This is kind of trick, since our REST framework was not able to
      recognize overloaded function do train. Hence, we use delegation here.
@@ -25,5 +26,13 @@ public class DeepLearningGridSearchHandler extends GridSearchHandler<Grid<DeepLe
   @Override
   protected ModelFactory<DeepLearningParameters> getModelFactory() {
     return ModelFactories.DEEP_LEARNING_MODEL_FACTORY;
+  }
+
+  @Deprecated
+  public static class DeepLearningGrid extends Grid<DeepLearningParameters> {
+
+    public DeepLearningGrid() {
+      super(null, null, null, null);
+    }
   }
 }

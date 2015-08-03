@@ -10,7 +10,7 @@ import hex.schemas.KMeansV3;
 /**
  * A specific handler for GBM grid search.
  */
-public class KMeansGridSearchHandler extends GridSearchHandler<Grid<KMeansModel.KMeansParameters>,
+public class KMeansGridSearchHandler extends GridSearchHandler<KMeansGridSearchHandler.KmeansGrid,
     KMeansGridSearchV99,
     KMeansModel.KMeansParameters,
     KMeansV3.KMeansParametersV3> {
@@ -26,5 +26,13 @@ public class KMeansGridSearchHandler extends GridSearchHandler<Grid<KMeansModel.
   @Override
   protected ModelFactory<KMeansModel.KMeansParameters> getModelFactory() {
     return ModelFactories.KMEANS_MODEL_FACTORY;
+  }
+
+  @Deprecated
+  public static class KmeansGrid extends Grid<KMeansModel.KMeansParameters> {
+
+    public KmeansGrid() {
+      super(null, null, null, null);
+    }
   }
 }

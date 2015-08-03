@@ -4,8 +4,6 @@ import hex.Distribution;
 import hex.deeplearning.DeepLearning;
 import hex.deeplearning.DeepLearningParameters;
 import water.api.API;
-import water.api.FrameV3.ColSpecifierV3;
-import water.api.KeyV3.ModelKeyV3;
 import water.api.ModelParametersSchema;
 
 public class DeepLearningV3 extends ModelBuilderSchema<DeepLearning,DeepLearningV3,DeepLearningV3.DeepLearningParametersV3> {
@@ -160,7 +158,7 @@ public class DeepLearningV3 extends ModelBuilderSchema<DeepLearning,DeepLearning
      * layers will be produced, and the middle hidden layer will have 200
      * neurons.
      */
-    @API(help = "Hidden layer sizes (e.g. 100,100).", level = API.Level.critical, direction=API.Direction.INOUT, gridable = false)
+    @API(help = "Hidden layer sizes (e.g. 100,100).", level = API.Level.critical, direction=API.Direction.INOUT, gridable = true)
     public int[] hidden;
 
     /**

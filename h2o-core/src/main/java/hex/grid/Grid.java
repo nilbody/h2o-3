@@ -50,17 +50,17 @@ public class Grid<MP extends Model.Parameters>
   /**
    * A cache of double[] hyper-parameters mapping to Models.
    */
-  private final IcedHashMap<IcedLong, Key<Model>> _cache = new IcedHashMap<>();
+  public final IcedHashMap<IcedLong, Key<Model>> _cache = new IcedHashMap<>();
 
   /**
    * Used "based" model parameters for this grid search.
    */
-  final MP _params;
+  public final MP _params;
 
   /**
    * Name of model generated included in this grid.
    */
-  final String _modelName;
+  public final String _modelName;
 
   /**
    * Names of used hyper parameters for this grid search.
@@ -70,7 +70,7 @@ public class Grid<MP extends Model.Parameters>
   public Grid(Key key, MP params, String[] hyperNames, String modelName) {
     super(key);
     // FIXME really i want to save frame?
-    _fr = params.train();
+    _fr = params != null ? params.train() : null;
     _params = params != null ? (MP) params.clone() : null;
     _hyper_names = hyperNames;
     _modelName = modelName;
@@ -117,6 +117,7 @@ public class Grid<MP extends Model.Parameters>
   }
 
   public Key<Model> getModelKey(MP params) {
+    System.err.println("get model: " + params.checksum());
     long checksum = params.checksum();
     Key<Model> mKey = _cache.get(IcedLong.valueOf(checksum));
     return mKey;
@@ -125,6 +126,7 @@ public class Grid<MP extends Model.Parameters>
   /* FIXME:  should pass model parameters instead of checksum, but model
    * parameters are not imutable and model builder modifies them! */
   Key<Model> putModel(long checksum, Key<Model> modelKey) {
+    System.err.println("put model: " + checksum);
     return _cache.put(IcedLong.valueOf(checksum), modelKey);
   }
 

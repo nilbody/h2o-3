@@ -10,7 +10,7 @@ import hex.tree.drf.DRFModel;
 /**
  * A specific handler for DRF grid search.
  */
-public class DRFGridSearchHandler extends GridSearchHandler<Grid<DRFModel.DRFParameters>,
+public class DRFGridSearchHandler extends GridSearchHandler<DRFGridSearchHandler.DRFGrid,
     DRFGridSearchV99,
     DRFModel.DRFParameters,
     DRFV3.DRFParametersV3> {
@@ -25,5 +25,13 @@ public class DRFGridSearchHandler extends GridSearchHandler<Grid<DRFModel.DRFPar
   @Override
   protected ModelFactory<DRFModel.DRFParameters> getModelFactory() {
     return ModelFactories.DRF_MODEL_FACTORY;
+  }
+
+  @Deprecated
+  public static class DRFGrid extends Grid<DRFModel.DRFParameters> {
+
+    public DRFGrid() {
+      super(null, null, null, null);
+    }
   }
 }

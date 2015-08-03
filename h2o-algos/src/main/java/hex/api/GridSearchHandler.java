@@ -121,7 +121,7 @@ public abstract class GridSearchHandler<G extends Grid<MP>,
 
     public ModelParametersFromSchemaBuilder<MP, PS> set(String name, Object value) {
       try {
-        Field f = paramsSchema.getClass().getDeclaredField(name);
+        Field f = paramsSchema.getClass().getField(name);
         API api = (API) f.getAnnotations()[0];
         Schema.setField(paramsSchema, f, name, value.toString(), api.required(), paramsSchema.getClass());
         fields.add(name);

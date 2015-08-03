@@ -18,6 +18,8 @@ import hex.tree.gbm.GBMModel;
  * based on given parameters.
  *
  * Note: can be replaced by reflection in the future.
+ *
+ * FIXME: should be removed - see /ModelBuilders/Algo meta end-point.
  */
 public class ModelFactories {
 
@@ -68,7 +70,7 @@ public class ModelFactories {
       new ModelFactory<DeepLearningParameters>() {
         @Override
         public String getModelName() {
-          return "Deep Learning";
+          return "DeepLearning";
         }
 
         @Override
