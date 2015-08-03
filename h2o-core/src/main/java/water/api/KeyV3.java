@@ -1,15 +1,20 @@
 package water.api;
 
-import hex.Grid;
+import java.lang.reflect.Constructor;
+import java.util.Arrays;
+
 import hex.Model;
-import water.*;
+import hex.grid.Grid;
+import water.DKV;
+import water.Iced;
+import water.Job;
+import water.Key;
+import water.Keyed;
+import water.Value;
 import water.exceptions.H2OIllegalArgumentException;
 import water.fvec.Frame;
 import water.fvec.Vec;
 import water.util.ReflectionUtils;
-
-import java.lang.reflect.Constructor;
-import java.util.Arrays;
 
 /**
  * <p>

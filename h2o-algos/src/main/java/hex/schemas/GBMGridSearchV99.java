@@ -1,6 +1,6 @@
 package hex.schemas;
 
-import hex.tree.gbm.GBMGrid;
+import hex.grid.Grid;
 import hex.tree.gbm.GBMModel;
 
 /**
@@ -8,5 +8,9 @@ import hex.tree.gbm.GBMModel;
  *
  * @see hex.schemas.GridSearchSchema
  */
-public class GBMGridSearchV99 extends GridSearchSchema<GBMGrid, GBMGridSearchV99, GBMModel.GBMParameters, GBMV3.GBMParametersV3> {
+public class GBMGridSearchV99 extends GridSearchSchema<
+    Grid<GBMModel.GBMParameters>,
+    GBMGridSearchV99,
+    GBMModel.GBMParameters,
+    GBMV3.GBMParametersV3> {
 }

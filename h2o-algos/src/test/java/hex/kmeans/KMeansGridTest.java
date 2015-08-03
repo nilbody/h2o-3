@@ -1,18 +1,25 @@
 package hex.kmeans;
 
-import java.util.*;
+import org.junit.BeforeClass;
+import org.junit.Ignore;
+import org.junit.Test;
 
-import hex.Grid;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Collections;
+import java.util.HashMap;
+import java.util.Random;
+
 import hex.Model;
-
-import org.junit.*;
-
+import hex.grid.Grid;
+import hex.grid.GridSearch;
 import water.DKV;
 import water.Key;
 import water.TestUtil;
 import water.fvec.Frame;
 import water.util.ArrayUtils;
 
+import static hex.grid.ModelFactories.KMEANS_MODEL_FACTORY;
 import static org.junit.Assert.assertTrue;
 
 
@@ -25,7 +32,7 @@ public class KMeansGridTest extends TestUtil {
 
   @Test
   public void testIrisGrid() {
-    KMeansGrid kmg = null;
+    Grid grid = null;
     Frame fr = null;
     try {
       fr = parse_test_file("smalldata/iris/iris_wheader.csv");
@@ -51,25 +58,24 @@ public class KMeansGridTest extends TestUtil {
       params._train = fr._key;
       // Fire off a grid search
       // Get the Grid for this modeling class and frame
-      kmg = KMeansGrid.get(Key.<Grid>make("kmeans_grid"), fr, params, hyperParms);
-      Grid.GridSearch gs = kmg.startGridSearch(params, hyperParms);
-      Grid g2 = (Grid) gs.get();
-      assert g2 == kmg;
+
+      GridSearch gs = GridSearch.startGridSearch(params, hyperParms, KMEANS_MODEL_FACTORY);
+      grid = (Grid) gs.get();
 
       // Print out the models from this grid search
-      Model[] ms = gs.models();
+      Model[] ms = grid.getModels();
       for (Model m : ms) {
         KMeansModel kmm = (KMeansModel) m;
         System.out.println(kmm._output._tot_withinss + " " + Arrays.deepToString(
-            ArrayUtils.zip(g2.getHyperNames(), g2.getHyperValues(kmm._parms))));
+            ArrayUtils.zip(grid.getHyperNames(), grid.getHyperValues(kmm._parms))));
       }
 
     } finally {
       if (fr != null) {
         fr.remove();
       }
-      if (kmg != null) {
-        kmg.remove();
+      if (grid != null) {
+        grid.remove();
       }
     }
   }
@@ -77,7 +83,7 @@ public class KMeansGridTest extends TestUtil {
   //@Ignore("PUBDEV-1643")
   @Test
   public void testDuplicatesCarsGrid() {
-    KMeansGrid kmg = null;
+    Grid grid = null;
     Frame fr = null;
     try {
       fr = parse_test_file("smalldata/iris/iris_wheader.csv");
@@ -97,14 +103,11 @@ public class KMeansGridTest extends TestUtil {
       KMeansModel.KMeansParameters params = new KMeansModel.KMeansParameters();
       params._train = fr._key;
       // Get the Grid for this modeling class and frame
-      kmg = KMeansGrid.get(Key.<Grid>make("kmeans_grid"), fr, params, hyperParms);
-      Grid.GridSearch gs = kmg.startGridSearch(params, hyperParms);
-      Grid g2 = (Grid) gs.get();
-      assert g2 == kmg;
+      GridSearch gs = GridSearch.startGridSearch(params, hyperParms, KMEANS_MODEL_FACTORY);
+      grid = (Grid) gs.get();
 
       // Check that duplicate model have not been constructed
-      // Check that duplicate model have not been constructed
-      Model[] models = gs.models();
+      Model[] models = grid.getModels();
       assertTrue("Number of returned models has to be > 0", models.length > 0);
       // But all off them should be same
       Key<Model> modelKey = models[0]._key;
@@ -115,15 +118,15 @@ public class KMeansGridTest extends TestUtil {
       if (fr != null) {
         fr.remove();
       }
-      if (kmg != null) {
-        kmg.remove();
+      if (grid != null) {
+        grid.remove();
       }
     }
   }
 
   @Test
   public void testUserPointsCarsGrid() {
-    KMeansGrid kmg = null;
+    Grid grid = null;
     Frame fr = null;
     Frame init = frame(ard(ard(5.0, 3.4, 1.5, 0.2),
                            ard(7.0, 3.2, 4.7, 1.4),
@@ -148,16 +151,13 @@ public class KMeansGridTest extends TestUtil {
       params._train = fr._key;
       params._user_points = init._key;
       // Get the Grid for this modeling class and frame
-      kmg = KMeansGrid.get(Key.<Grid>make("kmeans_grid"), fr, params, hyperParms);
-      Grid.GridSearch gs = kmg.startGridSearch(params, hyperParms);
-      Grid g2 = (Grid) gs.get();
-      assert g2 == kmg;
+      GridSearch gs = GridSearch.startGridSearch(params, hyperParms, KMEANS_MODEL_FACTORY);
+      grid = (Grid) gs.get();
 
       // Check that duplicate model have not been constructed
-      Integer numModels = gs.models().length;
+      Integer numModels = grid.getModels().length;
       System.out.println("Grid consists of " + numModels + " models");
       assertTrue(numModels == 4);
-
     } finally {
       if (fr != null) {
         fr.remove();
@@ -165,15 +165,15 @@ public class KMeansGridTest extends TestUtil {
       if (init != null) {
         init.remove();
       }
-      if (kmg != null) {
-        kmg.remove();
+      if (grid != null) {
+        grid.remove();
       }
     }
   }
 
   @Ignore("PUBDEV-1675")
   public void testRandomCarsGrid() {
-    KMeansGrid kmg = null;
+    Grid grid = null;
     KMeansModel kmRebuilt = null;
     Frame fr = null;
     Frame init = frame(ard(ard(5.0, 3.4, 1.5, 0.2),
@@ -254,13 +254,11 @@ public class KMeansGridTest extends TestUtil {
         params._user_points = init._key;
       }
       // Get the Grid for this modeling class and frame
-      kmg = KMeansGrid.get(Key.<Grid>make("kmeans_grid"), fr, params, hyperParms);
-      Grid.GridSearch gs = kmg.startGridSearch(params, hyperParms);
-      Grid g2 = (Grid) gs.get();
-      assert g2 == kmg;
+      GridSearch gs = GridSearch.startGridSearch(params, hyperParms, KMEANS_MODEL_FACTORY);
+      grid = (Grid) gs.get();
 
       // Check that cardinality of grid
-      Model[] ms = gs.models();
+      Model[] ms = grid.getModels();
       Integer numModels = ms.length;
       System.out.println("Grid consists of " + numModels + " models");
       assertTrue(numModels == kDim * initDim * standardizeDim * seedDim);
@@ -309,8 +307,8 @@ public class KMeansGridTest extends TestUtil {
       if (fr != null) {
         fr.remove();
       }
-      if (kmg != null) {
-        kmg.remove();
+      if (grid != null) {
+        grid.remove();
       }
       if (kmRebuilt != null) {
         kmRebuilt.remove();

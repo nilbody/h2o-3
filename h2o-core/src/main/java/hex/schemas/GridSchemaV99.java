@@ -1,8 +1,6 @@
 package hex.schemas;
 
-import hex.Grid;
-import hex.Model;
-import water.Key;
+import hex.grid.Grid;
 import water.api.API;
 import water.api.KeyV3;
 import water.api.Schema;

@@ -1,6 +1,6 @@
 package hex.schemas;
 
-import hex.kmeans.KMeansGrid;
+import hex.grid.Grid;
 import hex.kmeans.KMeansModel;
 
 /**
@@ -8,5 +8,9 @@ import hex.kmeans.KMeansModel;
  *
  * @see hex.schemas.GridSearchSchema
  */
-public class KMeansGridSearchV99 extends GridSearchSchema<KMeansGrid, KMeansGridSearchV99, KMeansModel.KMeansParameters, KMeansV3.KMeansParametersV3> {
+public class KMeansGridSearchV99 extends GridSearchSchema<Grid<KMeansModel.KMeansParameters>,
+    KMeansGridSearchV99,
+    KMeansModel.KMeansParameters,
+    KMeansV3.KMeansParametersV3> {
+
 }

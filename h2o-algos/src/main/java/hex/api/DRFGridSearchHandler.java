@@ -1,22 +1,19 @@
 package hex.api;
 
-import hex.Grid;
+import hex.grid.Grid;
+import hex.grid.ModelFactories;
+import hex.grid.ModelFactory;
 import hex.schemas.DRFGridSearchV99;
 import hex.schemas.DRFV3;
-import hex.tree.drf.DRFGrid;
 import hex.tree.drf.DRFModel;
-import water.Key;
-import water.fvec.Frame;
-
-import java.util.Map;
 
 /**
  * A specific handler for DRF grid search.
  */
-public class DRFGridSearchHandler extends GridSearchHandler<DRFGrid,
-                                                            DRFGridSearchV99,
-                                                            DRFModel.DRFParameters,
-                                                            DRFV3.DRFParametersV3> {
+public class DRFGridSearchHandler extends GridSearchHandler<Grid<DRFModel.DRFParameters>,
+    DRFGridSearchV99,
+    DRFModel.DRFParameters,
+    DRFV3.DRFParametersV3> {
 
   /* This is kind of trick, since our REST framework was not able to
      recognize overloaded function do train. Hence, we use delegation here.
@@ -26,7 +23,7 @@ public class DRFGridSearchHandler extends GridSearchHandler<DRFGrid,
   }
 
   @Override
-  protected DRFGrid createGrid(Key<Grid> destKey, Frame f, DRFModel.DRFParameters params, Map<String,Object[]> hyperParams) {
-    return DRFGrid.get(destKey, f, params, hyperParams);
+  protected ModelFactory<DRFModel.DRFParameters> getModelFactory() {
+    return ModelFactories.DRF_MODEL_FACTORY;
   }
 }

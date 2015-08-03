@@ -1,7 +1,6 @@
 package hex.tree.drf;
 
 import org.junit.BeforeClass;
-import org.junit.Ignore;
 import org.junit.Test;
 
 import java.util.ArrayList;
@@ -10,14 +9,16 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.Random;
 
-import hex.Grid;
+import hex.grid.Grid;
 import hex.Model;
+import hex.grid.GridSearch;
 import water.DKV;
 import water.Key;
 import water.TestUtil;
 import water.fvec.Frame;
 import water.fvec.Vec;
 import water.util.ArrayUtils;
+import static hex.grid.ModelFactories.DRF_MODEL_FACTORY;
 
 import static org.junit.Assert.assertTrue;
 
@@ -30,7 +31,7 @@ public class DRFGridTest extends TestUtil {
 
   @Test
   public void testCarsGrid() {
-    DRFGrid drfg = null;
+    Grid grid = null;
     Frame fr = null;
     Vec old = null;
     try {
@@ -51,18 +52,16 @@ public class DRFGridTest extends TestUtil {
       params._train = fr._key;
       params._response_column = "cylinders";
       // Get the Grid for this modeling class and frame
-      drfg = DRFGrid.get(Key.<Grid>make("drf_grid"), fr, params, hyperParms);
-      Grid.GridSearch gs = drfg.startGridSearch(params, hyperParms);
-      Grid g2 = (Grid) gs.get();
-      assert g2 == drfg;
+      GridSearch gs = GridSearch.startGridSearch(params, hyperParms, DRF_MODEL_FACTORY);
+      grid = (Grid) gs.get();
 
       // Print out the models from this grid search
-      Model[] ms = gs.models();
+      Model[] ms = grid.getModels();
       for (Model m : ms) {
         DRFModel drf = (DRFModel) m;
         System.out.println(
             drf._output._scored_train[drf._output._ntrees]._mse + " " + Arrays.deepToString(
-                ArrayUtils.zip(g2.getHyperNames(), g2.getHyperValues(drf._parms))));
+                ArrayUtils.zip(grid.getHyperNames(), grid.getHyperValues(drf._parms))));
       }
 
     } finally {
@@ -72,8 +71,8 @@ public class DRFGridTest extends TestUtil {
       if (fr != null) {
         fr.remove();
       }
-      if (drfg != null) {
-        drfg.remove();
+      if (grid != null) {
+        grid.remove();
       }
     }
   }
@@ -81,7 +80,7 @@ public class DRFGridTest extends TestUtil {
   //@Ignore("PUBDEV-1643")
   @Test
   public void testDuplicatesCarsGrid() {
-    DRFGrid drfg = null;
+    Grid grid = null;
     Frame fr = null;
     Vec old = null;
     try {
@@ -104,14 +103,11 @@ public class DRFGridTest extends TestUtil {
       params._response_column = "economy";
 
       // Get the Grid for this modeling class and frame
-      drfg = DRFGrid.get(Key.<Grid>make("drf_grid"), fr, params, hyperParms);
-      Grid.GridSearch gs = drfg.startGridSearch(params, hyperParms);
-      Grid g2 = (Grid) gs.get();
-      assert g2 == drfg;
+      GridSearch gs = GridSearch.startGridSearch(params, hyperParms, DRF_MODEL_FACTORY);
+      grid = (Grid) gs.get();
 
       // Check that duplicate model have not been constructed
-      // Check that duplicate model have not been constructed
-      Model[] models = gs.models();
+      Model[] models = grid.getModels();
       assertTrue("Number of returned models has to be > 0", models.length > 0);
       // But all off them should be same
       Key<Model> modelKey = models[0]._key;
@@ -125,8 +121,8 @@ public class DRFGridTest extends TestUtil {
       if (fr != null) {
         fr.remove();
       }
-      if (drfg != null) {
-        drfg.remove();
+      if (grid != null) {
+        grid.remove();
       }
     }
   }
@@ -134,7 +130,7 @@ public class DRFGridTest extends TestUtil {
   //@Ignore("PUBDEV-1648")
   @Test
   public void testRandomCarsGrid() {
-    DRFGrid drfg = null;
+    Grid grid = null;
     DRFModel drfRebuilt = null;
     Frame fr = null;
     Vec old = null;
@@ -220,10 +216,8 @@ public class DRFGridTest extends TestUtil {
       params._train = fr._key;
       params._response_column = "economy (mpg)";
       // Get the Grid for this modeling class and frame
-      drfg = DRFGrid.get(Key.<Grid>make("drf_grid"), fr, params, hyperParms);
-      Grid.GridSearch gs = drfg.startGridSearch(params, hyperParms);
-      Grid g2 = (Grid) gs.get();
-      assert g2 == drfg;
+      GridSearch gs = GridSearch.startGridSearch(params, hyperParms, DRF_MODEL_FACTORY);
+      grid = (Grid) gs.get();
 
       System.out.println("ntrees search space: " + Arrays.toString(ntreesSpace));
       System.out.println("max_depth search space: " + Arrays.toString(maxDepthSpace));
@@ -231,7 +225,7 @@ public class DRFGridTest extends TestUtil {
       System.out.println("sample_rate search space: " + Arrays.toString(sampleRateSpace));
 
       // Check that cardinality of grid
-      Model[] ms = gs.models();
+      Model[] ms = grid.getModels();
       Integer numModels = ms.length;
       System.out.println("Grid consists of " + numModels + " models");
       assertTrue(numModels == ntreesDim * maxDepthDim * sampleRateDim * mtriesDim);
@@ -282,8 +276,8 @@ public class DRFGridTest extends TestUtil {
       if (fr != null) {
         fr.remove();
       }
-      if (drfg != null) {
-        drfg.remove();
+      if (grid != null) {
+        grid.remove();
       }
       if (drfRebuilt != null) {
         drfRebuilt.remove();

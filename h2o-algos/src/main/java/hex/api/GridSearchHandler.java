@@ -1,20 +1,26 @@
 package hex.api;
 
-import hex.Grid;
-import hex.ModelParametersBuilderFactory;
-import hex.schemas.GridSearchSchema;
-import hex.Model;
-import water.Job;
-import water.Key;
-import water.api.*;
-import water.exceptions.H2OIllegalArgumentException;
-import water.fvec.Frame;
-import water.util.PojoUtils;
-
 import java.lang.reflect.Field;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+
+import hex.Model;
+import hex.ModelParametersBuilderFactory;
+import hex.grid.Grid;
+import hex.grid.GridSearch;
+import hex.grid.ModelFactory;
+import hex.schemas.GridSearchSchema;
+import water.Job;
+import water.Key;
+import water.api.API;
+import water.api.Handler;
+import water.api.JobV3;
+import water.api.ModelParametersSchema;
+import water.api.Schema;
+import water.api.SchemaMetadata;
+import water.exceptions.H2OIllegalArgumentException;
+import water.util.PojoUtils;
 
 /**
  * FIXME: how to get rid of P, since it is already enforced by S
@@ -23,7 +29,7 @@ import java.util.Map;
  * @param <P>  Provides additional type information about grid search parameters.
  * @param <S>  Input/output schema produced by this grid search handler (IN: parameters, OUT: parameters + job)
  */
-public abstract class GridSearchHandler< G extends Grid<MP, G>,
+public abstract class GridSearchHandler<G extends Grid<MP>,
                                 S extends GridSearchSchema<G,S, MP, P>,
                                 MP extends Model.Parameters,
                                 P extends ModelParametersSchema> extends Handler {
@@ -39,19 +45,23 @@ public abstract class GridSearchHandler< G extends Grid<MP, G>,
     validateHyperParams(parametersSchema, hyperParams);
 
     // Get/create a grid for given frame
+    // FIXME: Grid ID is not pass to grid search builder!
     Key<Grid> destKey = gridSearchSchema.grid_id != null ? gridSearchSchema.grid_id.key() : null;
     // Get actual parameters
     MP params = (MP) parametersSchema.createAndFillImpl();
     // Create target grid search object (keep it private for now)
-    G grid = gridSearchSchema.fillImpl(
-            createGrid(destKey, parametersSchema.training_frame.key().get(), params, hyperParams));
     // Start grid search and return the schema back with job key
-    Grid.GridSearch gsJob = grid.startGridSearch(params, hyperParams, new DefaultModelParametersBuilderFactory<MP,P>());
+    ModelFactory<MP> modelFactory = getModelFactory();
+    GridSearch
+        gsJob = GridSearch.startGridSearch(params,
+                                           hyperParams,
+                                           modelFactory,
+                                           new DefaultModelParametersBuilderFactory<MP,P>());
 
     // Fill schema with job parameters
     // FIXME: right now we have to remove grid parameters which we sent back
     gridSearchSchema.hyper_parameters = null;
-    gridSearchSchema.total_models = gsJob.getModelsCount();
+    gridSearchSchema.total_models = gsJob.getModelCount();
     gridSearchSchema.job = (JobV3) Schema.schema(version, Job.class).fillFromImpl(gsJob);
 
     return gridSearchSchema;
@@ -59,7 +69,7 @@ public abstract class GridSearchHandler< G extends Grid<MP, G>,
 
   // Force underlying handlers to create their grid implementations
   // - In the most of cases the call needs to be forwarded to GridSearch factory
-  protected abstract G createGrid(Key<Grid> destKey, Frame f, MP params, Map<String,Object[]> hyperParams);
+  protected abstract ModelFactory<MP> getModelFactory();
 
   /** Validate given hyper parameters with respect to type parameter P.
    *

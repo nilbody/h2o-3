@@ -1,6 +1,6 @@
 package hex.schemas;
 
-import hex.tree.drf.DRFGrid;
+import hex.grid.Grid;
 import hex.tree.drf.DRFModel;
 
 /**
@@ -8,5 +8,9 @@ import hex.tree.drf.DRFModel;
  *
  * @see hex.schemas.GridSearchSchema
  */
-public class DRFGridSearchV99 extends GridSearchSchema<DRFGrid, DRFGridSearchV99, DRFModel.DRFParameters, DRFV3.DRFParametersV3> {
+public class DRFGridSearchV99 extends GridSearchSchema<Grid<DRFModel.DRFParameters>,
+    DRFGridSearchV99,
+    DRFModel.DRFParameters,
+    DRFV3.DRFParametersV3> {
+
 }
