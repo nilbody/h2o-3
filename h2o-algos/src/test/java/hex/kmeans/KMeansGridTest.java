@@ -1,5 +1,6 @@
 package hex.kmeans;
 
+import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Ignore;
 import org.junit.Test;
@@ -8,7 +9,9 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.Map;
 import java.util.Random;
+import java.util.Set;
 
 import hex.Model;
 import hex.grid.Grid;
@@ -17,6 +20,7 @@ import water.DKV;
 import water.Key;
 import water.TestUtil;
 import water.fvec.Frame;
+import water.test.util.GridTestUtils;
 import water.util.ArrayUtils;
 
 import static hex.grid.ModelFactories.KMEANS_MODEL_FACTORY;
@@ -51,25 +55,44 @@ public class KMeansGridTest extends TestUtil {
           KMeans.Initialization.Furthest});
 
       // Search over this range of the init enum
-      hyperParms.put("_seed", new Long[]{0L, 1L, 123456789L, 987654321L});
+      hyperParms.put("_seed", new Long[]{/* 0L, */ 1L, 123456789L, 987654321L});
+      // Name of used hyper parameters
+      String[] hyperParamNames = hyperParms.keySet().toArray(new String[hyperParms.size()]);
+      Arrays.sort(hyperParamNames);
+      int hyperSpaceSize = ArrayUtils.crossProductSize(hyperParms);
 
       // Create default parameters
       KMeansModel.KMeansParameters params = new KMeansModel.KMeansParameters();
       params._train = fr._key;
-      // Fire off a grid search
-      // Get the Grid for this modeling class and frame
-
+      // Fire off a grid search and get result
       GridSearch gs = GridSearch.startGridSearch(params, hyperParms, KMEANS_MODEL_FACTORY);
       grid = (Grid) gs.get();
+      // Make sure number of produced models match size of specified hyper space
+      Assert.assertEquals("Size of grid should match to size of hyper space", hyperSpaceSize,
+                          grid.getModelKeys().length);
+      //
+      // Make sure that names of used parameters match
+      //
+      String [] gridHyperNames = grid.getHyperNames();
+      Arrays.sort(gridHyperNames);
+      Assert.assertArrayEquals("Hyper parameters names should match!", hyperParamNames,
+                               gridHyperNames);
 
-      // Print out the models from this grid search
+
+      //
+      // Make sure that values of used parameters match as well to the specified values
+      //
+      Map<String, Set<Object>> usedModelParams = GridTestUtils.initMap(hyperParamNames);
       Model[] ms = grid.getModels();
       for (Model m : ms) {
         KMeansModel kmm = (KMeansModel) m;
         System.out.println(kmm._output._tot_withinss + " " + Arrays.deepToString(
             ArrayUtils.zip(grid.getHyperNames(), grid.getHyperValues(kmm._parms))));
+        GridTestUtils.extractParams(usedModelParams, kmm._parms, hyperParamNames);
       }
-
+      GridTestUtils.assertParamsEqual("Grid models parameters have to cover specified hyper space",
+                                      hyperParms,
+                                      usedModelParams);
     } finally {
       if (fr != null) {
         fr.remove();

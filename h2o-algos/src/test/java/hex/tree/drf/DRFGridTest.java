@@ -1,5 +1,6 @@
 package hex.tree.drf;
 
+import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
@@ -7,7 +8,9 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.Map;
 import java.util.Random;
+import java.util.Set;
 
 import hex.grid.Grid;
 import hex.Model;
@@ -17,6 +20,7 @@ import water.Key;
 import water.TestUtil;
 import water.fvec.Frame;
 import water.fvec.Vec;
+import water.test.util.GridTestUtils;
 import water.util.ArrayUtils;
 import static hex.grid.ModelFactories.DRF_MODEL_FACTORY;
 
@@ -46,6 +50,10 @@ public class DRFGridTest extends TestUtil {
       hyperParms.put("_ntrees", new Integer[]{20, 40});
       hyperParms.put("_max_depth", new Integer[]{10, 20});
       hyperParms.put("_mtries", new Integer[]{-1, 4, 5});
+      // Name of used hyper parameters
+      String[] hyperParamNames = hyperParms.keySet().toArray(new String[hyperParms.size()]);
+      Arrays.sort(hyperParamNames);
+      int hyperSpaceSize = ArrayUtils.crossProductSize(hyperParms);
 
       // Fire off a grid search
       DRFModel.DRFParameters params = new DRFModel.DRFParameters();
@@ -54,15 +62,32 @@ public class DRFGridTest extends TestUtil {
       // Get the Grid for this modeling class and frame
       GridSearch gs = GridSearch.startGridSearch(params, hyperParms, DRF_MODEL_FACTORY);
       grid = (Grid) gs.get();
+      // Make sure number of produced models match size of specified hyper space
+      Assert.assertEquals("Size of grid should match to size of hyper space", hyperSpaceSize,
+                          grid.getModelKeys().length);
+      //
+      // Make sure that names of used parameters match
+      //
+      String [] gridHyperNames = grid.getHyperNames();
+      Arrays.sort(gridHyperNames);
+      Assert.assertArrayEquals("Hyper parameters names should match!", hyperParamNames,
+                               gridHyperNames);
 
-      // Print out the models from this grid search
+      //
+      // Make sure that values of used parameters match as well to the specified values
+      //
       Model[] ms = grid.getModels();
+      Map<String, Set<Object>> usedModelParams = GridTestUtils.initMap(hyperParamNames);
       for (Model m : ms) {
         DRFModel drf = (DRFModel) m;
         System.out.println(
             drf._output._scored_train[drf._output._ntrees]._mse + " " + Arrays.deepToString(
                 ArrayUtils.zip(grid.getHyperNames(), grid.getHyperValues(drf._parms))));
+        GridTestUtils.extractParams(usedModelParams, drf._parms, hyperParamNames);
       }
+      GridTestUtils.assertParamsEqual("Grid models parameters have to cover specified hyper space",
+                                      hyperParms,
+                                      usedModelParams);
 
     } finally {
       if (old != null) {

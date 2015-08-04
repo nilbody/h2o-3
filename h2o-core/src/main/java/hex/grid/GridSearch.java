@@ -168,7 +168,6 @@ public final class GridSearch<MP extends Model.Parameters> extends Job<Grid> {
     Model model = null;
     try {
       while ((params = _hyperSpaceWalker.nextModelParameters(model)) != null) {
-        System.err.println(params.toJsonString());
         if (!isRunning()) {
           cancel();
           return;

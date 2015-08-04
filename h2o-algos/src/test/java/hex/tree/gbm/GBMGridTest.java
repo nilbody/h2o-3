@@ -1,5 +1,6 @@
 package hex.tree.gbm;
 
+import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
@@ -7,21 +8,23 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.Map;
 import java.util.Random;
+import java.util.Set;
 
 import hex.Distribution;
-import hex.grid.Grid;
 import hex.Model;
+import hex.grid.Grid;
 import hex.grid.GridSearch;
 import water.DKV;
 import water.Key;
 import water.TestUtil;
 import water.fvec.Frame;
 import water.fvec.Vec;
+import water.test.util.GridTestUtils;
 import water.util.ArrayUtils;
 
 import static hex.grid.ModelFactories.GBM_MODEL_FACTORY;
-
 import static org.junit.Assert.assertTrue;
 
 public class GBMGridTest extends TestUtil {
@@ -49,6 +52,10 @@ public class GBMGridTest extends TestUtil {
       hyperParms.put("_distribution", new Distribution.Family[]{Distribution.Family.multinomial});
       hyperParms.put("_max_depth", new Integer[]{1, 2, 5});
       hyperParms.put("_learn_rate", new Float[]{0.01f, 0.1f, 0.3f});
+      // Name of used hyper parameters
+      String[] hyperParamNames = hyperParms.keySet().toArray(new String[hyperParms.size()]);
+      Arrays.sort(hyperParamNames);
+      int hyperSpaceSize = ArrayUtils.crossProductSize(hyperParms);
 
       // Fire off a grid search
       GBMModel.GBMParameters params = new GBMModel.GBMParameters();
@@ -57,18 +64,32 @@ public class GBMGridTest extends TestUtil {
       // Get the Grid for this modeling class and frame
       GridSearch gs = GridSearch.startGridSearch(params, hyperParms, GBM_MODEL_FACTORY);
       grid = (Grid) gs.get();
+      // Make sure number of produced models match size of specified hyper space
+      Assert.assertEquals("Size of grid should match to size of hyper space", hyperSpaceSize, grid.getModelKeys().length);
+      //
+      // Make sure that names of used parameters match
+      //
+      String [] gridHyperNames = grid.getHyperNames();
+      Arrays.sort(gridHyperNames);
+      Assert.assertArrayEquals("Hyper parameters names should match!", hyperParamNames,
+                               gridHyperNames);
 
-      // Print out the models from this grid search
+      //
+      // Make sure that values of used parameters match as well to the specified values
+      //
       Key<Model>[] mKeys = grid.getModelKeys();
+      Map<String, Set<Object>> usedModelParams = GridTestUtils.initMap(hyperParamNames);
       for (Key<Model> mKey : mKeys) {
         GBMModel gbm = (GBMModel) mKey.get();
         System.out.println(gbm._output._scored_train[gbm._output._ntrees]._mse + " " +
                            Arrays.deepToString(
                                ArrayUtils
                                    .zip(grid.getHyperNames(), grid.getHyperValues(gbm._parms))));
-        // FIXME verify that it is a model matching the hyper space
+        GridTestUtils.extractParams(usedModelParams, gbm._parms, hyperParamNames);
       }
-
+      GridTestUtils.assertParamsEqual("Grid models parameters have to cover specified hyper space",
+                                      hyperParms,
+                                      usedModelParams);
     } finally {
       if (old != null) {
         old.remove();
