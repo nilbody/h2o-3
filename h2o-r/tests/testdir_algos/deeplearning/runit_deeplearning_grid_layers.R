@@ -9,36 +9,42 @@ check.deeplearning.gridlayers <- function(conn) {
     str <- lapply(ll, function(x) { paste("(", paste(x, collapse = ","), ")", sep = "") })
     paste(str, collapse = ",")
   }
-  hidden_layers <- list(c(20, 20), c(50, 50, 50))
-  hyper_params <- list(loss = c("MeanSquare", "CrossEntropy"), hidden = hidden_layers)
+  hidden_opts <- list(c(20, 20), c(50, 50, 50))
+  loss_opts <- c("MeanSquare", "CrossEntropy")
+  hyper_params <- list(loss = loss_opts, hidden = hidden_opts)
   Log.info(paste("Deep Learning grid search over hidden layers:", pretty.list(hyper_params)))
   hh <- h2o.grid("deeplearning", x=1:4, y=5, training_frame=iris.hex, hyper_params = hyper_params)
-  expect_equal(length(hh@model_ids), 2)
+  size_of_hyper_space <- length(hidden_opts)*length(loss_opts)
+  expect_equal(length(hh@model_ids), size_of_hyper_space)
 
   # Get models
   hh_models <- lapply(hh@model_ids, function(mid) { 
     model = h2o.getModel(mid)
   })
   # Check expected number of models
-  expect_equal(length(hh_models), 2)
+  expect_equal(length(hh_models), size_of_hyper_space)
 
-  # FIXME
+  # Collect all hidden parameters from models and verify that they are only from hidden_opts list
+  hh_params <- unique(lapply(hh_models, function(model) { model@parameters$hidden }))
+  expect_equal(length(hh_params), length(hidden_opts))
+  expect_true(all(hh_params %in% hidden_opts))
+  expect_true(all(hidden_opts %in% hh_params))
 
-  #hh_params <- lapply(hh@model, function(x) { x@model$params$hidden })
-  #expect_equal(length(hh_params), length(hidden_layers))
-  #expect_true(all(hh_params %in% hidden_layers))
+  # Collect all loss parameters from models and verify that they are only from loss_opts list
+  hl_params <- unique(lapply(hh_models, function(model) { model@parameters$loss }))
+  expect_equal(length(hl_params), length(loss_opts))
+  # Symetric difference should be empty
+  expect_true(all(hl_params %in% loss_opts))
+  expect_true(all(loss_opts %in% hl_params))
 
+  cat("\n\n Grid:")
+  print(hh)
 
-  #cat("\n\n HH_PARAMS:")
+  cat("\n\n Collected hidden parameters from grid results:")
+  print(hh_params)
 
-  #print(hh_params)
-
-  #cat("\n\n HIDDEN LAYERS:")
-
-  #print(hidden_layers)
-
-  #expect_true(all(hh_params %in% hidden_layers))
-  #print(hh)
+  cat("\n\n Defined hidden parameters for grid search:")
+  print(hidden_opts)
 
   testEnd()
 }
