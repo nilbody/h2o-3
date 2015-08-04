@@ -46,7 +46,10 @@ public interface HyperSpaceWalker<MP extends Model.Parameters> {
   public MP getParams();
 
   /**
-   * FIXME
+   *
+   * The external Grid API uses a HashMap<String,Object> to describe a set of hyperparameter values,
+   * where the String is a valid field name in the corresponding Model.Parameter, and the Object is
+   * the field value (boxed as needed).
    */
   public static class CartezianWalker<MP extends Model.Parameters> implements HyperSpaceWalker<MP> {
 
@@ -176,7 +179,7 @@ public interface HyperSpaceWalker<MP extends Model.Parameters> {
   }
 
   /**
-   * FIXME
+   * FIXME : finish random walk
    */
   abstract public static class RandomWalker<MP extends Model.Parameters>
       implements HyperSpaceWalker<MP> {

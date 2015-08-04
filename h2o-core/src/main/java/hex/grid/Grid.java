@@ -13,32 +13,13 @@ import water.util.IcedLong;
 import water.util.PojoUtils;
 
 /**
- * A Grid of Models Used to explore Model hyper-parameter space.  Lazily filled in, this object
+ * A Grid of Models representing result of hyper-parameter space exploration.  Lazily filled in,
+ * this object
  * represents the potentially infinite variety of hyperparameters of a given model & dataset.
- *
- * One subclass per kind of Model, e.g. KMeans or GLM or GBM or DL.  The Grid tracks Models and
- * their hyperparameters, and will allow discovery of existing Models by hyperparameter, or building
- * Models on demand by hyperparameter.  The Grid can manage a (simplistic) hyperparameter search
- * space.
- *
- * The external Grid API uses a HashMap<String,Object> to describe a set of hyperparameter values,
- * where the String is a valid field name in the corresponding Model.Parameter, and the Object is
- * the field value (boxed as needed).
- *
- * The Grid implementation treats all hyperparameters as double values internally, indexed by a
- * simple number.  A complete set of hyper parameters is thus a {@code double[]}, and a set of
- * search parameters a {@code double[][]}.  The subclasses of Grid will need to convert between
- * these two formats.
- *
- * E.g. KMeansGrid will convert the initial center selection field "_init" Enum to and from a simple
- * double value internally.
  *
  * @param <MP> type of model build parameters
  */
-// FIXME should be abstract but REST API layer requires not abstract
-// FIXME should follow model build structure with INPUT and OUTPUT
-// FIXME vyzkouset grid search for Deep Learning
-// FIXME failed models should be represented in grid?
+// FIXME Should be failed models represented in grid?
 public class Grid<MP extends Model.Parameters>
     extends Lockable<Grid<MP>> {
 
@@ -67,6 +48,14 @@ public class Grid<MP extends Model.Parameters>
    */
   final String[] _hyper_names;
 
+  /**
+   * Construct a new grid object to store results of grid search.
+   *
+   * @param key  reference to this object
+   * @param params  initial parameters used by grid search
+   * @param hyperNames  names of used hyper parameters
+   * @param modelName  name of model included in this object (e.g., "GBM")
+   */
   public Grid(Key key, MP params, String[] hyperNames, String modelName) {
     super(key);
     // FIXME really i want to save frame?
@@ -76,8 +65,9 @@ public class Grid<MP extends Model.Parameters>
     _modelName = modelName;
   }
 
-  /**
-   * @return Model name
+  /** Returns name of model included in this object.
+   *
+   * @return name of model (for example, "DRF", "GBM")
    */
   public String modelName() {
     return _modelName;
@@ -94,21 +84,27 @@ public class Grid<MP extends Model.Parameters>
    * @param m           A model to act as a starting point
    * @param hyperLimits Upper bounds for this search
    * @return Suggested next value for hyperparameter h or NaN if no next value
-   */
-  protected /*abstract*/ double suggestedNextHyperValue(int h, Model m, double[] hyperLimits) {
+
+  protected double suggestedNextHyperValue(int h, Model m, double[] hyperLimits) {
     throw H2O.fail();
-  }
+  }*/
 
   /**
-   * @return The data frame used to train all these models.  All models are trained on the same data
-   * frame, but might be validated on multiple different frames.
+   * Returns the data frame used to train all these models.
+   * <p>
+   *     All models are trained on the same data
+   *     frame, but might be validated on multiple different frames.
+   * </p>
+   * @return training frame shared among all models
    */
   public Frame trainingFrame() {
     return _fr;
   }
 
   /**
-   * @param params A set of hyper parameter values
+   * Returns model for given combination of model parameters or null if the model does not exist.
+   *
+   * @param params  parameters of the model
    * @return A model run with these parameters, or null if the model does not exist.
    */
   public Model getModel(MP params) {
@@ -128,10 +124,18 @@ public class Grid<MP extends Model.Parameters>
     return _cache.put(IcedLong.valueOf(checksum), modelKey);
   }
 
+  /**
+   * Returns keys of all models included in this object.
+   * @return  list of model keys
+   */
   public Key<Model>[] getModelKeys() {
     return _cache.values().toArray(new Key[_cache.size()]);
   }
 
+  /**
+   * Return all models included in this grid object.
+   * @return  all models in this grid
+   */
   public Model[] getModels() {
     Collection<Key<Model>> modelKeys = _cache.values();
     Model[] models = new Model[modelKeys.size()];
@@ -144,10 +148,10 @@ public class Grid<MP extends Model.Parameters>
   }
 
   /**
-   * Return value of hyper parameters used for this hyper search.
+   * Return value of hyper parameters used for this grid search.
    *
-   * @param parms  Model parameters
-   * @return  values of hyper parameters
+   * @param parms  model parameters
+   * @return  values of hyper parameters used by grid search producing this grid object.
    */
   public Object[] getHyperValues(MP parms) {
     Object[] result = new Object[_hyper_names.length];
@@ -157,7 +161,7 @@ public class Grid<MP extends Model.Parameters>
     return result;
   }
 
-  /** Returns an array of used hyper parameters.
+  /** Returns an array of used hyper parameters names.
    *
    * @return  names of hyper parameters used in this hyper search
    */

@@ -23,23 +23,30 @@ import water.exceptions.H2OIllegalArgumentException;
 import water.util.PojoUtils;
 
 /**
+ * A generic grid search handler implementing launch of grid search.
+ *
+ * <p>A model specific grid search handlers should inherit from class and implements corresponding
+ * methods.
+ *
  * FIXME: how to get rid of P, since it is already enforced by S
  *
  * @param <G>  Implementation output of grid search
- * @param <P>  Provides additional type information about grid search parameters.
- * @param <S>  Input/output schema produced by this grid search handler (IN: parameters, OUT: parameters + job)
+ * @param <MP> Type of model parameters
+ * @param <P>  Type of schema representing model parameters
+ * @param <S>  Schema representing structure of grid search end-point
  */
 public abstract class GridSearchHandler<G extends Grid<MP>,
-                                S extends GridSearchSchema<G,S, MP, P>,
-                                MP extends Model.Parameters,
-                                P extends ModelParametersSchema> extends Handler {
+    S extends GridSearchSchema<G, S, MP, P>,
+    MP extends Model.Parameters,
+    P extends ModelParametersSchema> extends Handler {
 
-  public S do_train(int version, S gridSearchSchema) { // just following convention of model builders
+  public S do_train(int version,
+                    S gridSearchSchema) { // just following convention of model builders
     // Extract input parameters
     P parametersSchema = gridSearchSchema.parameters;
     // TODO: Verify algorithm inputs, make sure to reject wrong training_frame
     // Extract hyper parameters
-    Map<String,Object[]> hyperParams = gridSearchSchema.hyper_parameters;
+    Map<String, Object[]> hyperParams = gridSearchSchema.hyper_parameters;
     // Verify list of hyper parameters
     // Right now only names, no types
     validateHyperParams(parametersSchema, hyperParams);
@@ -53,10 +60,11 @@ public abstract class GridSearchHandler<G extends Grid<MP>,
     // Start grid search and return the schema back with job key
     ModelFactory<MP> modelFactory = getModelFactory();
     GridSearch
-        gsJob = GridSearch.startGridSearch(params,
+        gsJob = GridSearch.startGridSearch(destKey,
+                                           params,
                                            hyperParams,
                                            modelFactory,
-                                           new DefaultModelParametersBuilderFactory<MP,P>());
+                                           new DefaultModelParametersBuilderFactory<MP, P>());
 
     // Fill schema with job parameters
     // FIXME: right now we have to remove grid parameters which we sent back
@@ -71,10 +79,12 @@ public abstract class GridSearchHandler<G extends Grid<MP>,
   // - In the most of cases the call needs to be forwarded to GridSearch factory
   protected abstract ModelFactory<MP> getModelFactory();
 
-  /** Validate given hyper parameters with respect to type parameter P.
+  /**
+   * Validate given hyper parameters with respect to type parameter P.
    *
    * It verifies that given parameters are annotated in P with @API annotation
-   * @param params  regular model build parameters
+   *
+   * @param params      regular model build parameters
    * @param hyperParams map of hyper parameters
    */
   protected void validateHyperParams(P params, Map<String, Object[]> hyperParams) {
@@ -88,17 +98,21 @@ public abstract class GridSearchHandler<G extends Grid<MP>,
           break;
         }
       }
-      if (fieldMetadata == null)
-        throw new H2OIllegalArgumentException(hparam.getKey(), "grid", "Unknown hyper parameter for grid search!");
-      if (!fieldMetadata.is_gridable)
+      if (fieldMetadata == null) {
         throw new H2OIllegalArgumentException(hparam.getKey(), "grid",
-                "Illegal hyper parameter for grid search! The parameter '" + fieldMetadata.name + " is not gridable!");
+                                              "Unknown hyper parameter for grid search!");
+      }
+      if (!fieldMetadata.is_gridable) {
+        throw new H2OIllegalArgumentException(hparam.getKey(), "grid",
+                                              "Illegal hyper parameter for grid search! The parameter '"
+                                              + fieldMetadata.name + " is not gridable!");
+      }
     }
   }
 
 
-  static class DefaultModelParametersBuilderFactory<MP extends Model.Parameters,PS extends ModelParametersSchema>
-          implements ModelParametersBuilderFactory<MP> {
+  static class DefaultModelParametersBuilderFactory<MP extends Model.Parameters, PS extends ModelParametersSchema>
+      implements ModelParametersBuilderFactory<MP> {
 
     @Override
     public ModelParametersBuilder<MP> get(MP initialParams) {
@@ -106,8 +120,17 @@ public abstract class GridSearchHandler<G extends Grid<MP>,
     }
   }
 
-  public static class ModelParametersFromSchemaBuilder<MP extends Model.Parameters,PS extends ModelParametersSchema>
-        implements ModelParametersBuilderFactory.ModelParametersBuilder<MP> {
+  /**
+   * Model parameters factory building model parameters with respect to its schema. <p> A user calls
+   * the {@link #set(String, Object)} method with names of parameters as they are defined in Schema.
+   * The builder transfer the given values from Schema to corresponding model parameters object.
+   * </p>
+   *
+   * @param <MP> type of model parameters
+   * @param <PS> type of schema representing model parameters
+   */
+  public static class ModelParametersFromSchemaBuilder<MP extends Model.Parameters, PS extends ModelParametersSchema>
+      implements ModelParametersBuilderFactory.ModelParametersBuilder<MP> {
 
     final private MP params;
     final private PS paramsSchema;
@@ -123,18 +146,21 @@ public abstract class GridSearchHandler<G extends Grid<MP>,
       try {
         Field f = paramsSchema.getClass().getField(name);
         API api = (API) f.getAnnotations()[0];
-        Schema.setField(paramsSchema, f, name, value.toString(), api.required(), paramsSchema.getClass());
+        Schema.setField(paramsSchema, f, name, value.toString(), api.required(),
+                        paramsSchema.getClass());
         fields.add(name);
       } catch (NoSuchFieldException e) {
-        throw new IllegalArgumentException("Cannot find field '"+name+"'", e);
+        throw new IllegalArgumentException("Cannot find field '" + name + "'", e);
       } catch (IllegalAccessException e) {
-        throw new IllegalArgumentException("Cannot set field '"+name+"'", e);
+        throw new IllegalArgumentException("Cannot set field '" + name + "'", e);
       }
       return this;
     }
 
     public MP build() {
-      PojoUtils.copyProperties(params, paramsSchema, PojoUtils.FieldNaming.DEST_HAS_UNDERSCORES, null, fields.toArray(new String[fields.size()]));
+      PojoUtils
+          .copyProperties(params, paramsSchema, PojoUtils.FieldNaming.DEST_HAS_UNDERSCORES, null,
+                          fields.toArray(new String[fields.size()]));
       return params;
     }
   }
