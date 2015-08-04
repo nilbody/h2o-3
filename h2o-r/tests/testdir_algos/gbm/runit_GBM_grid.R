@@ -9,30 +9,31 @@ check.gbm.grid <- function(conn) {
     str <- lapply(ll, function(x) { paste("(", paste(x, collapse = ","), ")", sep = "") })
     paste(str, collapse = ",")
   }
-  # FIXME get rid of underscores
-  hyper_parameters = list(ntrees = c(1, 5), learn_rate = c(0.1, 0.01))
+  ntrees_opts = c(1, 5)
+  learn_rate_opts = c(0.1, 0.01)
+  size_of_hyper_space = length(ntrees_opts) * length(learn_rate_opts)
+
+  hyper_parameters = list(ntrees = ntrees_opts, learn_rate = learn_rate_opts)
   Log.info(paste("GBM grid with the following hyper_parameters:", pretty.list(hyper_parameters)))
   gg <- h2o.grid("gbm", grid_id="gbm_grid_test", x=1:4, y=5, training_frame=iris.hex, hyper_params = hyper_parameters)
-  expect_equal(length(gg@model_ids), 2*2)
+  expect_equal(length(gg@model_ids), size_of_hyper_space)
 
   # Get models
   gg_models <- lapply(gg@model_ids, function(mid) { 
     model = h2o.getModel(mid)
   })
   # Check expected number of models
-  expect_equal(length(gg_models), 2*2)
-  # expect_true(all(hh_params %in% hidden_layers))
+  expect_equal(length(gg_models), size_of_hyper_space)
 
-  #cat("\n\n HH_PARAMS:")
+  # Check parameters coverage
+  # ntrees
+  expect_model_param(gg_models, "ntrees", ntrees_opts)
 
-  #print(hh_params)
+  # Learn rate
+  expect_model_param(gg_models, "learn_rate", learn_rate)
 
-  #cat("\n\n HIDDEN LAYERS:")
-
-  #print(hidden_layers)
-
-  #expect_true(all(hh_params %in% hidden_layers))
-  #print(hh)
+  cat("\n\n Grid search results:")
+  print(gg)
 
   testEnd()
 }
