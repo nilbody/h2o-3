@@ -20,6 +20,7 @@ apply from: 'gradle/timing.gradle'
 // classpath
 buildscript {
     repositories {
+        mavenLocal()
         mavenCentral()
         jcenter()
     }
@@ -117,6 +118,7 @@ subprojects {
     version = rootProject.version
 
     repositories {
+        mavenLocal()
         mavenCentral()
         maven {
           url "https://repository.cloudera.com/artifactory/cloudera-repos/"
@@ -185,7 +187,7 @@ subprojects {
 }
 
 task wrapper(type: Wrapper) {
-  gradleVersion = '2.3'
+  gradleVersion = '2.5'
 }
 
 //
