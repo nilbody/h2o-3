@@ -1,14 +1,17 @@
+setwd(normalizePath(dirname(R.utils::commandArgs(asValues=TRUE)$"f")))
+source("../../scripts/h2o-r-test-setup.R")
 ####################################################################################################
 ##
 ## Testing model saving when a validation model metric is present
 ##
 ####################################################################################################
 
-setwd(normalizePath(dirname(R.utils::commandArgs(asValues=TRUE)$"f")))
-source('../h2o-runit.R')
 
-test.save.all.algos <- function(conn) {
-  pros.hex <- h2o.uploadFile(conn, locate("smalldata/prostate/prostate.csv"))
+
+
+test.save.all.algos <- function() {
+
+  pros.hex <- h2o.uploadFile(locate("smalldata/prostate/prostate.csv"))
   pros.hex[,2] <- as.factor(pros.hex[,2])
   pros.hex[,4] <- as.factor(pros.hex[,4])
   pros.hex[,5] <- as.factor(pros.hex[,5])
@@ -18,17 +21,17 @@ test.save.all.algos <- function(conn) {
   pros.train <- h2o.assign(pros.hex[p.sid > .2, ], "pros.train")
   pros.test <- h2o.assign(pros.hex[p.sid <= .2, ], "pros.test")
 
-  iris.hex <- h2o.uploadFile(conn, locate("smalldata/iris/iris_wheader.csv"))
+  iris.hex <- h2o.uploadFile(locate("smalldata/iris/iris_wheader.csv"))
   i.sid <- h2o.runif(iris.hex)
   iris.train <- h2o.assign(iris.hex[i.sid > .2, ], "iris.train")
   iris.test <- h2o.assign(iris.hex[i.sid <= .2, ], "iris.test")
 
-  cars.hex <- h2o.uploadFile(conn, locate("smalldata/junit/cars.csv"))
+  cars.hex <- h2o.uploadFile(locate("smalldata/junit/cars.csv"))
   c.sid <- h2o.runif(cars.hex)
   cars.train <- h2o.assign(cars.hex[c.sid > .2, ], "cars.train")
   cars.test <- h2o.assign(cars.hex[c.sid <= .2, ], "cars.test")
 
-  tmp_dir <- tempdir()
+  tmp_dir <- sandbox()
 
   Log.info("Order is Multinmoal (w val, w/o val) Regression (w val, w/o val) Bin (w val, w/o val)")
 
@@ -148,7 +151,6 @@ test.save.all.algos <- function(conn) {
   expect_equal(pros.nv.drf, pros.no_val.drf)
   expect_equal(pros.v.drf, pros.val.drf)
 
-  testEnd()
 }
 
 doTest("Saving Models of All Algos with/without Validation", test.save.all.algos)

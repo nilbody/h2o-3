@@ -1,9 +1,11 @@
 setwd(normalizePath(dirname(R.utils::commandArgs(asValues=TRUE)$"f")))
-source('../h2o-runit.R')
+source("../../scripts/h2o-r-test-setup.R")
 
-test.pub_507_parse_fail <- function(localH2O) {
 
-hex <- h2o.importFile(localH2O, normalizePath(locate("smalldata/jira/pub_507.csv")), "p507")
+
+test.pub_507_parse_fail <- function() {
+
+hex <- h2o.importFile(normalizePath(locate("smalldata/jira/pub_507.csv")), "p507")
 
 rdat <- read.csv(normalizePath(locate("smalldata/jira/pub_507.csv")))
 
@@ -15,7 +17,7 @@ print(hex)
 
 expect_equal(as.data.frame(hex[2,1])[1,1], rdat[2,1])
 
-testEnd()
+
 
 }
 

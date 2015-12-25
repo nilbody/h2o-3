@@ -17,7 +17,7 @@ public class GAUtils {
       // skip useless URIs
       if (uri.contains("/NodePersistentStorage") || uri.contains("/Metadata")) return;
 
-      // clean URIs that include names eg. /3/DKV/foo
+      // clean URIs that include names eg. /3/DKV/random_key_name -> /3/DKV/
       if (uri.contains("/Frames/") ||
               uri.contains("/DKV/") ||
               uri.contains("/Models/") ||
@@ -66,13 +66,8 @@ public class GAUtils {
 
         // Figure out total memory usage
         int totMem = 0;
-        H2ONode[] members = H2O.CLOUD.members();
-        if (null != members) {
-          // Sum at MB level
-          for (int i = 0; i < members.length; i++) {
-            totMem += (members[i].get_max_mem()>>20);
-          }
-        }
+        for (H2ONode node : H2O.CLOUD.members() )
+          totMem += node._heartbeat.get_free_mem()>>20; // Sum at MB level
         //Simplfy to GB
         totMem = totMem>>10;
         H2O.GA.postAsync(new EventHit("System startup info", "Memory", "Total Cloud Memory (GB)", totMem));

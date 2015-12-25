@@ -1,12 +1,14 @@
+setwd(normalizePath(dirname(R.utils::commandArgs(asValues=TRUE)$"f")))
+source("../../scripts/h2o-r-test-setup.R")
 #
 # Exec2 pop assert
 #
 
-setwd(normalizePath(dirname(R.utils::commandArgs(asValues=TRUE)$"f")))
-source('../h2o-runit.R')
 
-the_test <- function(conn){
-  df = h2o.importFile(conn, locate('smalldata/jira/pub-569.csv'))
+
+
+the_test <- function(){
+  df = h2o.importFile(locate('smalldata/jira/pub-569.csv'))
 
   metric.quantilesScore <- function(valuesArray) {
     numberOfLevels <- 100
@@ -19,7 +21,7 @@ the_test <- function(conn){
   
   scores <- apply(df, 2, metric.quantilesScore)
 
-  testEnd()
+  
 }
 
 doTest('the_test', the_test)

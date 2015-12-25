@@ -15,12 +15,12 @@ public class GBMV3 extends SharedTreeV3<GBM,GBMV3,GBMV3.GBMParametersV3> {
 				"validation_frame",
         "nfolds",
         "keep_cross_validation_predictions",
+        "score_each_iteration",
         "fold_assignment",
         "fold_column",
 				"response_column",
 				"ignored_columns",
 				"ignore_const_cols",
-				"score_each_iteration",
 				"offset_column",
 				"weights_column",
 				"balance_classes",
@@ -32,24 +32,37 @@ public class GBMV3 extends SharedTreeV3<GBM,GBMV3,GBMV3.GBMParametersV3> {
 				"max_depth",
 				"min_rows",
 				"nbins",
+        "nbins_top_level",
 				"nbins_cats",
 				"r2_stopping",
+        "stopping_rounds",
+        "stopping_metric",
+        "stopping_tolerance",
 				"seed",
 				"build_tree_one_node",
         "learn_rate",
         "distribution",
         "tweedie_power",
-        "checkpoint"
+        "checkpoint",
+        "sample_rate",
+        "col_sample_rate",
+        "col_sample_rate_per_tree",
     };
 
     // Input fields
-    @API(help="Learning rate from 0.0 to 1.0", gridable = true)
+    @API(help="Learning rate (from 0.0 to 1.0)", gridable = true)
     public float learn_rate;
 
-    @API(help = "Distribution function", values = { "AUTO", "bernoulli", "multinomial", "gaussian", "poisson", "gamma", "tweedie" }, gridable = true)
+    @API(help = "Distribution function", values = { "AUTO", "bernoulli", "multinomial", "gaussian", "poisson", "gamma", "tweedie", "laplace" }, gridable = true)
     public Distribution.Family distribution;
 
     @API(help = "Tweedie Power (between 1 and 2)", level = API.Level.secondary, gridable = true)
     public double tweedie_power;
+
+    @API(help="Column sample rate (from 0.0 to 1.0)", gridable = true)
+    public float col_sample_rate;
+
+//    @API(help = "Quantile for quantile regression (from 0.0 to 1.0)", level = API.Level.secondary, gridable = true)
+//    public double quantile;
   }
 }

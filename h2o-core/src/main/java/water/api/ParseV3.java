@@ -5,7 +5,6 @@ import water.Iced;
 import water.Key;
 import water.api.KeyV3.VecKeyV3;
 import water.parser.ParserType;
-import water.util.DocGen.HTML;
 
 import java.util.Arrays;
 
@@ -53,9 +52,6 @@ public class ParseV3 extends RequestSchema<Iced, ParseV3> {
   @API(help="Block until the parse completes (as opposed to returning early and requiring polling")
   boolean blocking;
 
-  @API(help="Remove frame after blocking parse, and return array of Vecs")
-  boolean remove_frame;
-
   // Output fields
   @API(help="Parse job", direction=API.Direction.OUTPUT)
   JobV3 job;
@@ -64,18 +60,8 @@ public class ParseV3 extends RequestSchema<Iced, ParseV3> {
   @API(help="Rows", direction=API.Direction.OUTPUT)
   long rows;
 
-  // Only not-null if blocking==true and removeFrame=true
-  @API(help="Vec IDs", direction=API.Direction.OUTPUT)
-  VecKeyV3[] vec_ids;
-
 
   //==========================
-
-  @Override public HTML writeHTML_impl( HTML ab ) {
-    ab.title("Parse Started");
-    String url = JobV3.link(job.key.key());
-    return ab.href("Poll",url,url);
-  }
 
   // Helper so ParseSetup can link to Parse
   public static String link(Key[] srcs, String hexName, ParserType pType, byte sep, int ncols, int checkHeader, boolean singleQuotes, String[] columnNames, String[] columnTypes, String[][] naStrings, int chunkSize) {

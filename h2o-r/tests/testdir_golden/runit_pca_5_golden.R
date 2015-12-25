@@ -1,10 +1,12 @@
 setwd(normalizePath(dirname(R.utils::commandArgs(asValues=TRUE)$"f")))
-source('../h2o-runit.R')
+source("../../scripts/h2o-r-test-setup.R")
 
-test.poison.golden <- function(H2Oserver) {
+
+
+test.poison.golden <- function() {
   Log.info("Importing poison.csv data...") 
   poisonR <- read.csv(locate("smalldata/pca_test/poison.csv"), header = TRUE)
-  poisonH2O <- h2o.uploadFile(H2Oserver, locate("smalldata/pca_test/poison.csv"), destination_frame = "poisonH2O")
+  poisonH2O <- h2o.uploadFile(locate("smalldata/pca_test/poison.csv"), destination_frame = "poisonH2O")
   
   k_test <- sort(sample(1:8,3))
   for(k in k_test) {
@@ -33,7 +35,7 @@ test.poison.golden <- function(H2Oserver) {
     fitH2O <- h2o.prcomp(poisonH2O, k = k, transform = 'STANDARDIZE', max_iterations = 2000)
     checkPCAModel(fitH2O, fitR, tolerance = 1e-5)
   }
-  testEnd()
+  
 }
 
 doTest("PCA Golden Test: Poison with Variable K", test.poison.golden)

@@ -1,6 +1,5 @@
 package water;
 
-import water.util.DocGen.HTML;
 import water.util.ReflectionUtils;
 import water.util.UnsafeUtils;
 import water.fvec.*;
@@ -328,7 +327,7 @@ final public class Key<T extends Keyed> extends Iced<Key<T>> implements Comparab
 
 
   // Make a Key which is homed to specific nodes.
-  static <P extends Keyed> Key<P> make(byte[] kb, byte rf, byte systemType, boolean required, H2ONode... replicas) {
+  public static <P extends Keyed> Key<P> make(byte[] kb, byte rf, byte systemType, boolean required, H2ONode... replicas) {
     // no more than 3 replicas allowed to be stored in the key
     assert 0 <=replicas.length && replicas.length<=3;
     assert systemType<32; // only system keys allowed
@@ -487,9 +486,6 @@ final public class Key<T extends Keyed> extends Iced<Key<T>> implements Comparab
   /** Implementation of the {@link Iced} serialization protocol, only called by
    * auto-genned code.  Not intended to be called by user code. */
   @Override public final Key read_impl( AutoBuffer ab ) { return make(ab.getA1()); }
-  /** Implementation of the {@link Iced} serialization protocol, only called by
-   * auto-genned code.  Not intended to be called by user code. */
-  @Override public final HTML writeHTML_impl( HTML ab ) { return ab.p(toString()); }
   /** Implementation of the {@link Iced} serialization protocol, only called by
    * auto-genned code.  Not intended to be called by user code. */
   @Override public final AutoBuffer writeJSON_impl( AutoBuffer ab ) {

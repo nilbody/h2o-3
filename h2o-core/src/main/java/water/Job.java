@@ -1,14 +1,10 @@
 package water;
 
-import hex.ModelBuilder;
 import jsr166y.CountedCompleter;
-import water.H2O.H2OCountedCompleter;
-import water.exceptions.H2OKeyNotFoundArgumentException;
-import water.util.Log;
-
-import java.io.PrintWriter;
-import java.io.StringWriter;
 import java.util.Arrays;
+import water.H2O.H2OCountedCompleter;
+import water.util.Log;
+import water.util.StringUtils;
 
 /** Jobs are used to do minimal tracking of long-lifetime user actions,
  *  including progress-bar updates and the ability to review in progress or
@@ -18,65 +14,9 @@ import java.util.Arrays;
  *  Jobs produce a {@link Keyed} result, such as a Frame (from Parsing), or a Model.
  *  NOTE: the Job class is parametrized on the type of its _dest field.
  */
-public class Job<T extends Keyed> extends Keyed {
+public class Job<T extends Keyed> extends Keyed<Job> {
   /** A system key for global list of Job keys. */
   public static final Key<Job> LIST = Key.make(" JobList", (byte) 0, Key.BUILT_IN_KEY, false);
-  /** A list of field validation issues. */
-  public ValidationMessage[] _messages = new ValidationMessage[0];
-  private int _error_count = -1; // -1 ==> init not run yet, for those Jobs that have an init, like ModelBuilder. Note, this counts ONLY errors, not WARNs and etc.
-
-  /**
-   * init(expensive) is called inside a DTask, not from the http request thread.  If we add validation messages to the
-   * Job we want to update it in the DKV so the client can see them when polling and later on
-   * after the Job completes.
-   * <p>
-   * NOTE: this should only be called when no other threads are updating the job, for example from init() or after the
-   * DTask is stopped and is getting cleaned up.
-   */
-  public void updateValidationMessages() {
-    // Atomically update the validation messages in the Job in the DKV.
-
-    // In some cases we haven't stored to the DKV yet:
-    new TAtomic<Job>() {
-      @Override public Job atomic(Job old) {
-        if( old == null ) throw new H2OKeyNotFoundArgumentException((Key)null);
-
-        old._messages = _messages;
-        return old;
-      }
-    }.invoke(_key);
-    }
-
-  public int error_count() { return (_error_count > 0 ? _error_count : 0); }
-  public int error_count_or_uninitialized() { return _error_count; }
-
-  public void hide (String field_name, String message) { message(ValidationMessage.MessageType.HIDE , field_name, message); }
-
-  public void info (String field_name, String message) { message(ValidationMessage.MessageType.INFO , field_name, message); }
-
-  public void warn (String field_name, String message) { message(ValidationMessage.MessageType.WARN , field_name, message); }
-
-  public void error(String field_name, String message) { message(ValidationMessage.MessageType.ERROR, field_name, message); _error_count++; }
-
-  public void clearValidationErrors() {
-    _messages = new ValidationMessage[0];
-    _error_count = 0;
-  }
-
-  public void message(ValidationMessage.MessageType message_type, String field_name, String message) {
-    _messages = Arrays.copyOf(_messages, _messages.length + 1);
-    _messages[_messages.length - 1] = new ValidationMessage(message_type, field_name, message);
-  }
-
-  /** Get a string representation of only the ERROR ValidationMessages (e.g., to use in an exception throw). */
-  public String validationErrors() {
-    StringBuilder sb = new StringBuilder();
-    for( ValidationMessage vm : _messages )
-      if( vm.message_type == ValidationMessage.MessageType.ERROR )
-        sb.append(vm.toString()).append("\n");
-    return sb.toString();
-  }
-
   private static class JobList extends Keyed {
     Key<Job>[] _jobs;
     JobList() { super(LIST); _jobs = new Key[0]; }
@@ -113,6 +53,8 @@ public class Job<T extends Keyed> extends Keyed {
   /** Since _dest is public final, not sure why we have a getter but some
    *  people like 'em. */
   public final Key<T> dest() { return _dest; }
+
+  public final Key<Job> jobKey() { return _key; }
 
   /** User description */
   public String _description;
@@ -164,7 +106,7 @@ public class Job<T extends Keyed> extends Keyed {
     }
   }
 
-  protected Job(Key<T> jobKey, Key<T> dest, String desc) {
+  private Job(Key<Job> jobKey, Key<T> dest, String desc) {
     super(jobKey);
     _description = desc;
     _dest = dest;
@@ -179,19 +121,19 @@ public class Job<T extends Keyed> extends Keyed {
   }
   // Job Keys are pinned to this node (i.e., the node that invoked the
   // computation), because it should be almost always updated locally
-  private static Key defaultJobKey() { return Key.make((byte) 0, Key.JOB, false, H2O.SELF); }
+  private static Key<Job> defaultJobKey() { return Key.make((byte) 0, Key.JOB, false, H2O.SELF); }
 
 
   /** Start this task based on given top-level fork-join task representing job computation.
    *  @param fjtask top-level job computation task.
    *  @param work Units of work to be completed
    *  @param restartTimer
-   * @return this job in {@link JobState#RUNNING} state
+   *  @return this job in {@link JobState#RUNNING} state
    *
    *  @see JobState
    *  @see H2OCountedCompleter
    */
-  public Job<T> start(final H2OCountedCompleter fjtask, long work, boolean restartTimer) {
+  protected Job<T> start(final H2OCountedCompleter fjtask, long work, boolean restartTimer) {
     if (work >= 0)
       DKV.put(_progressKey = createProgressKey(), new Progress(work));
     assert _state == JobState.CREATED : "Trying to run job which was already run?";
@@ -211,6 +153,7 @@ public class Job<T extends Keyed> extends Keyed {
           if( getCompleter() == null ) { // nobody else to handle this exception, so print it out
             System.err.println("barrier onExCompletion for "+fjtask);
             ex.printStackTrace();
+            Job.this.failed(ex);
           }
           return true;
         }
@@ -290,10 +233,7 @@ public class Job<T extends Keyed> extends Keyed {
   /** Signal exceptional cancellation of this job.
    *  @param ex exception causing the termination of job. */
   public void failed(Throwable ex) {
-    StringWriter sw = new StringWriter();
-    PrintWriter pw = new PrintWriter(sw);
-    ex.printStackTrace(pw);
-    String stackTrace = sw.toString();
+    String stackTrace = StringUtils.toString(ex);
     changeJobState("Got exception '" + ex.getClass() + "', with msg '" + ex.getMessage() + "'\n" + stackTrace, JobState.FAILED);
     //if(_fjtask != null && !_fjtask.isDone()) _fjtask.completeExceptionally(ex);
   }
@@ -423,41 +363,19 @@ public class Job<T extends Keyed> extends Keyed {
 
   @Override protected Futures remove_impl(Futures fs) {
     if (null != _progressKey && deleteProgressKey()) DKV.remove(_progressKey, fs);
-    return fs;
+    return super.remove_impl(fs);
+  }
+
+  /** Write out K/V pairs, in this case progress. */
+  @Override protected AutoBuffer writeAll_impl(AutoBuffer ab) { 
+    ab.putKey(_progressKey);
+    return super.writeAll_impl(ab);
+  }
+  @Override protected Keyed readAll_impl(AutoBuffer ab, Futures fs) { 
+    ab.getKey(_progressKey,fs);
+    return super.readAll_impl(ab,fs);
   }
 
   /** Default checksum; not really used by Jobs.  */
   @Override protected long checksum_impl() { throw H2O.fail("Job checksum does not exist by definition"); }
-
-  /** The result of an abnormal Model.Parameter check.  Contains a
-   *  level, a field name, and a message.
-   *
-   *  Can be an ERROR, meaning the parameters can't be used as-is,
-   *  a HIDE, which means the specified field should be hidden given
-   *  the values of other fields, or a WARN or INFO for informative
-   *  messages to the user.
-   */
-  public static final class ValidationMessage extends Iced {
-    public enum MessageType { HIDE, INFO, WARN, ERROR }
-    final ModelBuilder.ValidationMessage.MessageType message_type;
-    final String field_name;
-    final String message;
-
-    public ValidationMessage(ModelBuilder.ValidationMessage.MessageType message_type, String field_name, String message) {
-      this.message_type = message_type;
-      this.field_name = field_name;
-      this.message = message;
-      switch (message_type) {
-        case INFO: Log.info(field_name + ": " + message); break;
-        case WARN: Log.warn(field_name + ": " + message); break;
-        case ERROR: Log.err(field_name + ": " + message); break;
-      }
-    }
-
-    public MessageType getMessageType() {
-      return message_type;
-    }
-
-    @Override public String toString() { return message_type + " on field: " + field_name + ": " + message; }
-  }
 }

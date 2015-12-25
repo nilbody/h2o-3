@@ -1,12 +1,15 @@
+setwd(normalizePath(dirname(R.utils::commandArgs(asValues=TRUE)$"f")))
+source("../../scripts/h2o-r-test-setup.R")
 ##
 # Test: Logging H2O from R
 # Description: Capture POST commands sent from R and corresponding HTTP response.
 ##
 
-setwd(normalizePath(dirname(R.utils::commandArgs(asValues=TRUE)$"f")))
-source('../h2o-runit.R')
 
-test.rh2o_logging <- function(conn) {
+
+
+test.rh2o_logging <- function() {
+
   # Change log paths to R working directory
   h2o.setLogPath(getwd(), "Command")
   h2o.setLogPath(getwd(), "Error")
@@ -19,7 +22,7 @@ test.rh2o_logging <- function(conn) {
 
   Log.info("Begin logging..."); h2o.startLogging()
   Log.info("Import iris dataset, then run summary and GBM")
-  iris.hex <- h2o.uploadFile(conn, path = locate("smalldata/iris/iris_wheader.csv"), key = "iris.hex")
+  iris.hex <- h2o.uploadFile(path = locate("smalldata/iris/iris_wheader.csv"), key = "iris.hex")
   print(summary(iris.hex))
   iris.gbm <- h2o.gbm(x = 1:4, y = 5, data = iris.hex)
   print(iris.gbm)
@@ -32,7 +35,6 @@ test.rh2o_logging <- function(conn) {
   expect_false(file.exists(cmd_path))
   expect_false(file.exists(err_path))
 
-  testEnd()
 }
 
 doTest("Logging Tests: h2o.startLogging, h2o.stopLogging", test.rh2o_logging)

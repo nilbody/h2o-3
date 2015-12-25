@@ -1,7 +1,9 @@
 setwd(normalizePath(dirname(R.utils::commandArgs(asValues=TRUE)$"f")))
-source('../h2o-runit.R')
+source("../../scripts/h2o-r-test-setup.R")
 
-test.parse.mismatching.col.length <- function(conn){
+
+
+test.parse.mismatching.col.length <- function(){
 
   df <- h2o.importFile(locate("smalldata/jira/hexdev_325.csv"), header = TRUE)
   expected <- c("C3", "Cats", "C3C3", "C4", "Mouse", "C6")
@@ -9,7 +11,7 @@ test.parse.mismatching.col.length <- function(conn){
 
   expect_equal(expected, actual)
 
-  testEnd()
+  
 }
 
 doTest("Testing Parsing of Mismatching Header and Data length", test.parse.mismatching.col.length)

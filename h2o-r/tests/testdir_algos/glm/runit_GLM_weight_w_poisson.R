@@ -1,12 +1,14 @@
+setwd(normalizePath(dirname(R.utils::commandArgs(asValues=TRUE)$"f")))
+source("../../../scripts/h2o-r-test-setup.R")
 ### This tests weights in glm on real data ######
 
-setwd(normalizePath(dirname(R.utils::commandArgs(asValues=TRUE)$"f")))
-source('../../h2o-runit.R')
 
-test <- function(h) {
+
+
+test <- function() {
 	#read in data
 	print("read in data")
-	fre = h2o.importFile(locate("smalldata/glm_test/freMTPL2freq.csv.zip"),conn = h,destination_frame = "fre")
+	fre = h2o.importFile(locate("smalldata/glm_test/freMTPL2freq.csv.zip"),destination_frame = "fre")
 	fre = fre[1:5000,]
 	fre$VehPower = as.factor(fre$VehPower)
 	fren = as.data.frame(fre)
@@ -24,7 +26,7 @@ test <- function(h) {
 	expect_less_than(hh@model$training_metrics@metrics$null_deviance, no_weight_hh@model$training_metrics@metrics$null_deviance)
 
 	print("test ends")
-	testEnd()
+	
 }
 
 

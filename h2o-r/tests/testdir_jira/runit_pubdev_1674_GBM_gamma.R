@@ -1,13 +1,10 @@
-####### This tests gamma distribution in gbm by comparing results with R ######
 setwd(normalizePath(dirname(R.utils::commandArgs(asValues=TRUE)$"f")))
-source('../h2o-runit.R')
+source("../../scripts/h2o-r-test-setup.R")
+####### This tests gamma distribution in gbm by comparing results with R ######
+
+
 
 test <- function(h) {
-	
-	#install.packages("devtools") 
-	#library(devtools) 
-	#install_github("harrysouthworth/gbm") 
-	#library(gbm)
 
 	cancar = read.csv(file =locate("smalldata/glm_test/cancar_logIn.csv"),header = T) 
 
@@ -29,10 +26,10 @@ test <- function(h) {
 	#expect_equal(max(pr),max(ph[,1]),tolerance = 1e-6)
 	#expect_equal(mean(pr),mean(ph[,1]),tolerance = 1e-6)
 	expect_equal(-1.182827,hh@model$init_f,tolerance = 1e-6)
-	expect_equal( 0.262575,min(ph[,1]),tolerance = 1e-5)
-	expect_equal(0.3581305,max(ph[,1]),tolerance = 1e-5)
+	expect_equal( 0.262575,min(ph[,1]),tolerance = 1e-4)
+	expect_equal(0.3581305,max(ph[,1]),tolerance = 1e-4)
 	expect_equal( 0.3064352,mean(ph[,1]),tolerance = 1e-5)
 	
-	testEnd()
+	
 }
 doTest("GBM gamma Test: GBM test for gamma distribution", test)

@@ -1,19 +1,15 @@
 setwd(normalizePath(dirname(R.utils::commandArgs(asValues=TRUE)$"f")))
-source('../../h2o-runit.R')
+source("../../../scripts/h2o-r-test-setup.R")
 
-Log.info("Loading LiblineaR and ROCR packages\n")
-
-#if(!"LiblineaR" %in% rownames(installed.packages())) install.packages("LiblineaR")
-#if(!"ROCR" %in% rownames(installed.packages())) install.packages("ROCR")
 
 library(LiblineaR)
 library(ROCR)
 
-test.LiblineaR <- function(conn) {
+test.LiblineaR <- function() {
   L1logistic <- function(train,trainLabels,test,testLabels,trainhex,testhex) {
     Log.info("Using default parameters for LiblineaR: \n")
     Log.info("   type =    0: Logistic Regression L2-Regularized\n")
-    Log.info("   cost =  100: Cost of connstraints parameter\n")
+    Log.info("   cost =  100: Cost of constraints parameter\n")
     Log.info("epsilon = 1E-2: Tolerance of termination criterion\n")
     Log.info("  cross =    0: No kfold cross-validation\n")
     LibR.m      <- LiblineaR(train, trainLabels,type=0, epsilon=1E-2, cost=100) #cost= 1../ (34 * 7))
@@ -41,13 +37,13 @@ test.LiblineaR <- function(conn) {
                      beta_epsilon   = 1E-2)
     
     h2op         <- predict(h2o.m, testhex)
-    h2opreds     <- head(h2op, nrow(h2op))
-    h2oCM        <- table(testLabels, h2opreds$predict)
+    h2opreds     <- as.numeric(as.character(as.data.frame(h2op)[,1]))
+    h2oCM        <- table(testLabels, h2opreds)
     
     h2oPrecision <- h2oCM[1]/ (h2oCM[1] + h2oCM[3])
     h2oRecall    <- h2oCM[1]/ (h2oCM[1] + h2oCM[2])
     h2oF1        <- 2 * (h2oPrecision * h2oRecall)/ (h2oPrecision + h2oRecall)
-    h2oAUC       <- performance(prediction(h2opreds$predict, testLabels), measure = "auc")@y.values
+    h2oAUC       <- performance(prediction(h2opreds, testLabels), measure = "auc")@y.values
     
     Log.info("                ============= H2O Performance =============\n")
     Log.info(paste("H2O AUC (performance(prediction(predictions,actual))): ", h2oAUC[[1]], "\n", sep = ""))
@@ -69,7 +65,7 @@ test.LiblineaR <- function(conn) {
   L2logistic <- function(train,trainLabels,test,testLabels,trainhex,testhex) {
     Log.info("Using these parameters for LiblineaR: \n")
     Log.info("   type =                      0: Logistic Regression L2-Regularized\n")
-    Log.info("   cost =                     10: Cost of connstraints parameter\n")
+    Log.info("   cost =                     10: Cost of constraints parameter\n")
     Log.info("epsilon =                   1E-2: Tolerance of termination criterion\n")
     Log.info("  cross =                      0: No kfold cross-validation\n")
     LibR.m      <- LiblineaR(train, trainLabels, type=0, epsilon=1E-2,cost=10)
@@ -97,13 +93,13 @@ test.LiblineaR <- function(conn) {
                      epsilon = 1E-2)
     
     h2op     <- h2o.predict(h2o.m, testhex)
-    h2opreds <- head(h2op, nrow(h2op))
-    h2oCM    <- table(testLabels, h2opreds$predict)
+    h2opreds     <- as.numeric(as.character(as.data.frame(h2op)[,1]))
+    h2oCM    <- table(testLabels, h2opreds)
     
     h2oPrecision <- h2oCM[1]/ (h2oCM[1] + h2oCM[3])
     h2oRecall    <- h2oCM[1]/ (h2oCM[1] + h2oCM[2])
     h2oF1        <- 2 * (h2oPrecision * h2oRecall)/ (h2oPrecision + h2oRecall)
-    h2oAUC       <- performance(prediction(h2opreds$predict, testLabels), measure = "auc")@y.values
+    h2oAUC       <- performance(prediction(h2opreds, testLabels), measure = "auc")@y.values
     
     Log.info("                ============= H2O Performance =============\n")
     Log.info(paste("H2O AUC (performance(prediction(predictions,actual))): ", h2oAUC[[1]], "\n",sep=""))
@@ -127,7 +123,7 @@ test.LiblineaR <- function(conn) {
     Log.info("
             Comparing the L1-regularized LR coefficients (should be close in magnitude)
             Expect a sign flip because modeling against log(../(1-p)) vs log((1-p)/p).
-            Note that this is not the issue of connsistency of signs between odds ratios
+            Note that this is not the issue of consistency of signs between odds ratios
             and coefficients.\n")
 
     Log.info("                ========= H2O & LibR coeff. comparison ===\n")
@@ -140,8 +136,8 @@ test.LiblineaR <- function(conn) {
   }
 
   Log.info("Importing prostate test/train data...\n")
-  prostate.train.hex <- h2o.uploadFile(conn, locate("smalldata/logreg/prostate_train.csv"), "pTrain.hex")
-  prostate.test.hex  <- h2o.uploadFile(conn, locate("smalldata/logreg/prostate_test.csv"), "pTest.hex")
+  prostate.train.hex <- h2o.uploadFile(locate("smalldata/logreg/prostate_train.csv"), "pTrain.hex")
+  prostate.test.hex  <- h2o.uploadFile(locate("smalldata/logreg/prostate_test.csv"), "pTest.hex")
   prostate.train.hex$CAPSULE <- as.factor(prostate.train.hex$CAPSULE)
   prostate.test.hex$CAPSULE <- as.factor(prostate.test.hex$CAPSULE)
   prostate.train.dat <- read.csv(locate("smalldata/logreg/prostate_train.csv")) #head(prostate.train.hex,nrow(prostate.train.hex))
@@ -153,7 +149,7 @@ test.LiblineaR <- function(conn) {
   models             <- L1logistic(xTrain,yTrain,xTest,yTest,prostate.train.hex,prostate.test.hex)
   #models2            <- L2logistic(xTrain,yTrain,xTest,yTest,prostate.train.hex,prostate.test.hex)
   compareCoefs(models[[1]], models[[2]])
-  testEnd()
+  
 }
 
 doTest("LiblineaR Test: Prostate", test.LiblineaR)

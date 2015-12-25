@@ -1,9 +1,11 @@
-### This tests observation weights in glm ######
 setwd(normalizePath(dirname(R.utils::commandArgs(asValues=TRUE)$"f")))
-source('../../h2o-runit.R')
+source("../../../scripts/h2o-r-test-setup.R")
+### This tests observation weights in glm ######
 
 
-test_weights_by_row_duplication <- function(conn) {
+
+
+test_weights_by_row_duplication <- function() {
   
   require(testthat)
   
@@ -69,7 +71,7 @@ test_weights_by_row_duplication <- function(conn) {
                hh2@model$validation_metrics@metrics$logloss,
                tolerance = 1e-6)
   
-  testEnd()
+  
 }
 
 

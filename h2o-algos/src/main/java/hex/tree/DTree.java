@@ -2,6 +2,7 @@ package hex.tree;
 
 import water.*;
 import water.fvec.Chunk;
+import water.fvec.Frame;
 import water.util.*;
 
 import java.util.*;
@@ -35,10 +36,40 @@ public class DTree extends Iced {
   // Public stats about tree
   public int _leaves;
   public int _depth;
+  public final int _mtrys;           // Number of columns to choose amongst in splits (at every split)
+  public final int _mtrys_per_tree;  // Number of columns to choose amongst in splits (once per tree)
+  public final transient Random _rand; // RNG for split decisions & sampling
+  public final int[] _cols; // Per-tree selection of columns to consider for splits
 
-  public DTree( String[] names, int ncols, char nbins, char nbins_cats, char nclass, double min_rows ) { this(names,ncols,nbins,nbins_cats,nclass,min_rows,-1); }
-  public DTree( String[] names, int ncols, char nbins, char nbins_cats, char nclass, double min_rows, long seed ) {
-    _names = names; _ncols = ncols; _nbins=nbins; _nbins_cats=nbins_cats; _nclass=nclass; _min_rows = min_rows; _ns = new Node[1]; _seed = seed;
+  public DTree(Frame fr, int ncols, char nbins, char nbins_cats, char nclass, double min_rows, int mtrys, int mtrys_per_tree, long seed) {
+    _names = fr.names();
+    _ncols = ncols;
+    _nbins=nbins;
+    _nbins_cats=nbins_cats;
+    _nclass=nclass;
+    _min_rows = min_rows;
+    _ns = new Node[1];
+    _mtrys = mtrys;
+    _mtrys_per_tree = mtrys_per_tree;
+    _seed = seed;
+    _rand = RandomUtils.getRNG(seed);
+    int[] activeCols=new int[_ncols];
+    for (int i=0;i<activeCols.length;++i)
+      activeCols[i] = i;
+    // per-tree column sample if _mtrys_per_tree < _ncols
+    int len = _ncols;
+    if (mtrys_per_tree < _ncols) {
+      Random colSampleRNG = RandomUtils.getRNG(_seed*0xDA7A);
+      for( int i=0; i<mtrys_per_tree; i++ ) {
+        if( len == 0 ) break;
+        int idx2 = colSampleRNG.nextInt(len);
+        int col = activeCols[idx2];
+        activeCols[idx2] = activeCols[--len];
+        activeCols[len] = col;
+      }
+      activeCols = Arrays.copyOfRange(activeCols,len,activeCols.length);
+    }
+    _cols = activeCols;
   }
 
   public final Node root() { return _ns[0]; }
@@ -47,7 +78,8 @@ public class DTree extends Iced {
 
   // Return Node i
   public final Node node( int i ) {
-    if( i >= _len ) throw new ArrayIndexOutOfBoundsException(i);
+    if( i >= _len )
+      throw new ArrayIndexOutOfBoundsException(i);
     return _ns[i];
   }
   public final UndecidedNode undecided( int i ) { return (UndecidedNode)node(i); }
@@ -125,7 +157,7 @@ public class DTree extends Iced {
       DHistogram h = hs[_col];
       assert _bin > 0 && _bin < h.nbins();
       assert _bs==null : "Dividing point is a bitset, not a bin#, so dont call splat() as result is meaningless";
-      if( _equal == 1 ) { assert h.bins(_bin)!=0; return h.binAt(_bin); }
+      if( _equal == 1 ) { assert h.bins(_bin)!=0; return (float)h.binAt(_bin); }
       assert _equal==0; // not here for bitset splits, just range splits
       // Find highest non-empty bin below the split
       int x=_bin-1;
@@ -143,11 +175,11 @@ public class DTree extends Iced {
       // and we set hi=48.4.  Since this is an integer column, we round lo to
       // 48 (largest integer below the split) and hi to 49 (smallest integer
       // above the split).  Finally we average them, and split at 48.5.
-      float lo = h.binAt(x+1);
-      float hi = h.binAt(n  );
-      if( h._isInt > 0 ) lo = h._step==1 ? lo-1 : (float)Math.floor(lo);
-      if( h._isInt > 0 ) hi = h._step==1 ? hi   : (float)Math.ceil (hi);
-      return (lo+hi)/2.0f;
+      double lo = h.binAt(x+1);
+      double hi = h.binAt(n  );
+      if( h._isInt > 0 ) lo = h._step==1 ? lo-1 : Math.floor(lo);
+      if( h._isInt > 0 ) hi = h._step==1 ? hi   : Math.ceil (hi);
+      return (float)((lo+hi)/2.0);
     }
 
     // Split a DHistogram.  Return null if there is no point in splitting
@@ -157,7 +189,7 @@ public class DTree extends Iced {
     // has constant data, or was not being tracked by a prior DHistogram
     // (for being constant data from a prior split), then that column will be
     // null in the returned array.
-    public DHistogram[] split(int way, char nbins, char nbins_cats, double min_rows, DHistogram hs[], float splat) {
+    public DHistogram[] split(int way, char nbins, char nbins_cats, double min_rows, DHistogram hs[], double splat) {
       double n = way==0 ? _n0 : _n1;
       if( n < min_rows || n <= 1 ) return null; // Too few elements
       double se = way==0 ? _se0 : _se1;
@@ -173,7 +205,7 @@ public class DTree extends Iced {
         // min & max come from the original column data, since splitting on an
         // unrelated column will not change the j'th columns min/max.
         // Tighten min/max based on actual observed data for tracked columns
-        float min, maxEx;
+        double min, maxEx;
         if( h._bins == null ) { // Not tracked this last pass?
           min = h._min;         // Then no improvement over last go
           maxEx = h._maxEx;
@@ -191,7 +223,7 @@ public class DTree extends Iced {
             if( h._bins[_bin]==0 )
               throw H2O.unimpl(); // Here I should walk up & down same as split() above.
             assert _bs==null : "splat not defined for BitSet splits";
-            float split = splat;
+            double split = splat;
             if( h._isInt > 0 ) split = (float)Math.ceil(split);
             if( way == 0 ) maxEx= split;
             else           min  = split;
@@ -207,10 +239,10 @@ public class DTree extends Iced {
         }
         if( min >  maxEx ) continue; // Happens for all-NA subsplits
         if( MathUtils.equalsWithinOneSmallUlp(min, maxEx) ) continue; // This column will not split again
-        if( Float.isInfinite(adj_nbins/(maxEx-min)) ) continue;
+        if( Double.isInfinite(adj_nbins/(maxEx-min)) ) continue;
         if( h._isInt > 0 && !(min+1 < maxEx ) ) continue; // This column will not split again
         assert min < maxEx && adj_nbins > 1 : ""+min+"<"+maxEx+" nbins="+adj_nbins;
-        nhists[j] = DHistogram.make(h._name,adj_nbins, nbins_cats, h._isInt, min, maxEx);
+        nhists[j] = DHistogram.make(h._name, adj_nbins, nbins_cats, h._isInt, min, maxEx);
         cnt++;                    // At least some chance of splitting
       }
       return cnt == 0 ? null : nhists;
@@ -232,18 +264,60 @@ public class DTree extends Iced {
   // An UndecidedNode: Has a DHistogram which is filled in (in parallel
   // with other histograms) in a single pass over the data.  Does not contain
   // any split-decision.
-  public static abstract class UndecidedNode extends Node {
-    public transient DHistogram[] _hs;
+  public static class UndecidedNode extends Node {
+    public transient DHistogram[] _hs; //(up to) one histogram per column
     public final int _scoreCols[];      // A list of columns to score; could be null for all
     public UndecidedNode( DTree tree, int pid, DHistogram[] hs ) {
       super(tree,pid);
       assert hs.length==tree._ncols;
-      _scoreCols = scoreCols(_hs=hs);
+      _hs = hs; //these histograms have no bins yet (just constructed)
+      _scoreCols = scoreCols();
     }
 
     // Pick a random selection of columns to compute best score.
     // Can return null for 'all columns'.
-    abstract public int[] scoreCols( DHistogram[] hs );
+    public int[] scoreCols() {
+      DTree tree = _tree;
+      if (tree._mtrys == _hs.length && tree._mtrys_per_tree == _hs.length) return null;
+
+      // per-tree pre-selected columns
+      int[] activeCols = tree._cols;
+//      Log.info("For tree with seed " + tree._seed + ", out of " + _hs.length + " cols, the following cols are activated via mtry_per_tree=" + tree._mtrys_per_tree + ": " + Arrays.toString(activeCols));
+
+      int[] cols = new int[activeCols.length];
+      int len=0;
+
+      // collect columns that can be split (non-constant, large enough to split, etc.)
+      for(int i = 0; i< activeCols.length; i++ ) {
+        int idx = activeCols[i];
+        assert(idx == i || tree._mtrys_per_tree < _hs.length);
+        if( _hs[idx]==null ) continue; // Ignore not-tracked cols
+        assert _hs[idx]._min < _hs[idx]._maxEx && _hs[idx].nbins() > 1 : "broken histo range "+_hs[idx];
+        cols[len++] = idx;        // Gather active column
+      }
+
+//      Log.info("These columns can be split: " + Arrays.toString(Arrays.copyOfRange(cols, 0, len)));
+      int choices = len;        // Number of columns I can choose from
+
+      // This shortcut is correct, but would result in trivially reordering all columns
+      // This reordering can change results due to tie-breaking, as different columns can get picked
+      // if (len == tree._mtrys) return Arrays.copyOfRange(cols, 0, len);
+
+      // It can happen that we have no choices, because this node cannot be split any more (all active columns are constant, for example).
+      if (choices > 0) {
+        // Draw up to mtry columns at random without replacement.
+        for (int i = 0; i < tree._mtrys; i++) {
+          if (len == 0) break;   // Out of choices!
+          int idx2 = tree._rand.nextInt(len);
+          int col = cols[idx2];     // The chosen column
+          cols[idx2] = cols[--len]; // Compress out of array; do not choose again
+          cols[len] = col;          // Swap chosen in just after 'len'
+        }
+        assert len < choices;
+      }
+//      Log.info("Picking these (mtry=" + tree._mtrys + ") columns to evaluate for splitting: " + Arrays.toString(Arrays.copyOfRange(cols, len, choices)));
+      return Arrays.copyOfRange(cols, len, choices);
+    }
 
     // Make the parent of this Node use a -1 NID to prevent the split that this
     // node otherwise induces.  Happens if we find out too-late that we have a
@@ -333,7 +407,7 @@ public class DTree extends Iced {
   // Internal tree nodes which split into several children over a single
   // column.  Includes a split-decision: which child does this Row belong to?
   // Does not contain a histogram describing how the decision was made.
-  public static abstract class DecidedNode extends Node {
+  public static class DecidedNode extends Node {
     public final Split _split;         // Split: col, equal/notequal/less/greater, nrows, MSE
     public final float _splat;         // Split At point: lower bin-edge of split
     // _equals\_nids[] \   0   1
@@ -346,10 +420,56 @@ public class DTree extends Iced {
     transient int _size = 0;  // Compressed byte size of this subtree
 
     // Make a correctly flavored Undecided
-    public abstract UndecidedNode makeUndecidedNode(DHistogram hs[]);
+    public UndecidedNode makeUndecidedNode(DHistogram hs[]) {
+      return new UndecidedNode(_tree, _nid, hs);
+    }
 
     // Pick the best column from the given histograms
-    public abstract Split bestCol( UndecidedNode u, DHistogram hs[] );
+    public Split bestCol( UndecidedNode u, DHistogram hs[] ) {
+      // Find the column with the best split (lowest score).  Unlike RF, DRF
+      // scores on all columns and selects splits on all columns.
+      DTree.Split best = new DTree.Split(-1,-1,null,(byte)0,Double.MAX_VALUE,Double.MAX_VALUE,Double.MAX_VALUE,0L,0L,0,0);
+      if( hs == null ) return best;
+      final int maxCols = u._scoreCols == null /* all cols */ ? hs.length : u._scoreCols.length;
+      FindSplits[] findSplits = new FindSplits[maxCols];
+      //total work is to find the best split across sum_over_cols_to_split(nbins)
+      long nbinsSum = 0;
+      for( int i=0; i<maxCols; i++ ) {
+        int col = u._scoreCols == null ? i : u._scoreCols[i];
+        if( hs[col]==null || hs[col].nbins() <= 1 ) continue;
+        nbinsSum += hs[col].nbins();
+      }
+      // for small work loads, do a serial loop, otherwise, submit work to FJ thread pool
+      final boolean isSmall = (nbinsSum <= 1024); //heuristic - 50 cols with 20 nbins, or 1 column with 1024 bins, etc.
+      for( int i=0; i<maxCols; i++ ) {
+        int col = u._scoreCols == null ? i : u._scoreCols[i];
+        if( hs[col]==null || hs[col].nbins() <= 1 ) continue;
+        findSplits[i] = new FindSplits(hs, col, u._nid);
+        if (isSmall) findSplits[i].compute2();
+        else H2O.submitTask(findSplits[i]);
+      }
+      for( int i=0; i<maxCols; i++ ) {
+        if (findSplits[i]==null) continue;
+        findSplits[i].join();
+        DTree.Split s = findSplits[i]._s;
+        if( s == null ) continue;
+        if (s.se() < best.se()) best = s;
+      }
+      return best;
+    }
+
+    class FindSplits extends H2O.H2OCountedCompleter<FindSplits> {
+      FindSplits(DHistogram[] hs, int col, int nid) { _hs = hs; _col = col; _nid = nid;}
+      final DHistogram[] _hs;
+      final int _col;
+      DTree.Split _s;
+      final int _nid;
+      @Override
+      protected void compute2() {
+        _s = _hs[_col].scoreMSE(_col, _tree._min_rows, _nid);
+        tryComplete();
+      }
+    }
 
     public DecidedNode( UndecidedNode n, DHistogram hs[] ) {
       super(n._tree,n._pid,n._nid); // Replace Undecided with this DecidedNode
@@ -363,7 +483,7 @@ public class DTree extends Iced {
         Arrays.fill(_nids,-1);
         return;
       }
-      _splat = (_split._equal == 0 || _split._equal == 1) ? _split.splat(hs) : -1; // Split-at value (-1 for group-wise splits)
+      _splat = (_split._equal == 0 || _split._equal == 1) ? _split.splat(hs) : -1f; // Split-at value (-1 for group-wise splits)
       final char nbins   = _tree._nbins;
       final char nbins_cats = _tree._nbins_cats;
       final double min_rows = _tree._min_rows;
@@ -377,7 +497,7 @@ public class DTree extends Iced {
     }
 
     public int ns( Chunk chks[], int row ) {
-      float d = (float)chks[_split._col].atd(row);
+      double d = chks[_split._col].atd(row);
       int bin;
       // Note that during *scoring* (as opposed to training), we can be exposed
       // to data which is outside the bin limits.
@@ -513,7 +633,7 @@ public class DTree extends Iced {
     }
   }
 
-  public static abstract class LeafNode extends Node {
+  public final static class LeafNode extends Node {
     public float _pred;
     public LeafNode( DTree tree, int pid ) { super(tree,pid); tree._leaves++; }
     public LeafNode( DTree tree, int pid, int nid ) { super(tree,pid,nid); tree._leaves++; }
@@ -523,6 +643,10 @@ public class DTree extends Iced {
       sb.append(_nid).append(" ");
       return sb.append("pred=").append(_pred).append("\n");
     }
+    // Insert just the predictions: a single byte/short if we are predicting a
+    // single class, or else the full distribution.
+    @Override protected AutoBuffer compress(AutoBuffer ab) { assert !Double.isNaN(_pred); return ab.put4f(_pred); }
+    @Override protected int size() { return 4; }
     public final double pred() { return _pred; }
   }
 

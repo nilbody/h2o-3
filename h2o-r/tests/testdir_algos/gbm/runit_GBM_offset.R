@@ -1,9 +1,11 @@
 setwd(normalizePath(dirname(R.utils::commandArgs(asValues=TRUE)$"f")))
-source('../../h2o-runit.R')
+source("../../../scripts/h2o-r-test-setup.R")
 
-test.GBM <- function(conn) {
+
+
+test.GBM <- function() {
   library(gbm)
-  df <- h2o.uploadFile(conn, locate("smalldata/prostate/prostate.csv"), destination_frame="prostate.hex")
+  df <- h2o.uploadFile(locate("smalldata/prostate/prostate.csv"), destination_frame="prostate.hex")
 
   ## AGE Regression
   glm <- h2o.glm(x=4:8,y="AGE",training_frame=df)
@@ -16,7 +18,7 @@ test.GBM <- function(conn) {
   expect_true(abs((h2o.mse(m1) - h2o.mse(m2))/h2o.mse(m1)) < 5e-2, "MSE with and without offset are too different for gaussian")
 
   model <- gbm(AGE~.-AGE-ID-CAPSULE + offset(offset), data=as.data.frame(df), distribution="gaussian")
-  expect_true(abs((m2@model$init_f - model$initF)/model$initF) < 1e-6, "initF mismatch with offset for gaussian")
+  expect_true(abs((m2@model$init_f - model$initF)/model$initF) < 5e-2, "initF mismatch with offset for gaussian")
 
 
 
@@ -26,7 +28,9 @@ test.GBM <- function(conn) {
   df$CAPSULE <- as.factor(df$CAPSULE)
 
   gbm <- h2o.gbm(x=3:8,y="CAPSULE",training_frame=df)
-  model <- gbm(CAPSULE~.-CAPSULE-ID, data=as.data.frame(df), distribution="bernoulli")
+  ldf <- as.data.frame(df)
+  ldf$CAPSULE <- as.integer(ldf$CAPSULE) - 1
+  model <- gbm(CAPSULE~.-CAPSULE-ID, data=ldf, distribution="bernoulli")
 
   expect_true(h2o.mse(gbm) < 0.11, "MSE too big without offset")
   expect_true(abs((gbm@model$init_f - model$initF)/model$initF) < 1e-6, "initF mismatch without offset for bernoulli")
@@ -35,9 +39,9 @@ test.GBM <- function(conn) {
   gbm <- h2o.gbm(x=3:8,y="CAPSULE",training_frame=df, offset_column="offset", distribution="bernoulli")
   expect_true(h2o.mse(gbm) < 0.11, "MSE too big with offset for bernoulli")
 
-  model <- gbm(CAPSULE~.-CAPSULE-ID + offset(offset), data=as.data.frame(df), distribution="bernoulli")
+  model <- gbm(CAPSULE~.-CAPSULE-ID + offset(offset), data=ldf, distribution="bernoulli")
   expect_true(abs((gbm@model$init_f - model$initF)/model$initF) < 1e-6, "initF mismatch with offset for bernoulli")
 
-  testEnd()
+  
 }
 doTest("GBM Test: offset", test.GBM)

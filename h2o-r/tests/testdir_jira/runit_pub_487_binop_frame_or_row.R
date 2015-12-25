@@ -1,7 +1,9 @@
-
-
 setwd(normalizePath(dirname(R.utils::commandArgs(asValues=TRUE)$"f")))
-source('../h2o-runit.R')
+source("../../scripts/h2o-r-test-setup.R")
+
+
+
+
 
 # use this for interactive setup
 #      library(h2o)
@@ -10,7 +12,7 @@ source('../h2o-runit.R')
 #      conn = h2o.init()
 
 
-test.frame_add <- function(conn) {
+test.frame_add <- function() {
 
     a_initial = cbind(
     c(0,0,1,0,0,1,0,0,0,0),
@@ -25,8 +27,8 @@ test.frame_add <- function(conn) {
     c(0,0,0,0,0,1,1,0,0,0)
     )
     
-    a.h2o <- as.h2o(conn, a_initial, destination_frame="cA_0")
-    b.h2o <- as.h2o(conn, a_initial, destination_frame="cA_1")
+    a.h2o <- as.h2o(a_initial, destination_frame="cA_0")
+    b.h2o <- as.h2o(a_initial, destination_frame="cA_1")
 
     Log.info("Try a.h2o[1,] + b.h2o[1,]")
     res <- a.h2o[1,] + b.h2o[1,]
@@ -41,7 +43,7 @@ test.frame_add <- function(conn) {
     res4 <- a.h2o == b.h2o
       
   
-    testEnd()
+    
 }
 
 doTest("Test frame add.", test.frame_add)

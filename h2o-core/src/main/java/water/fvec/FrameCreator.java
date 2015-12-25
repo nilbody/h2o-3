@@ -11,6 +11,7 @@ import java.util.Random;
 import java.util.UUID;
 
 import static water.fvec.Vec.makeCon;
+import water.util.RandomUtils;
 
 /**
  * Helper to make up a Frame from scratch, with random content
@@ -147,8 +148,9 @@ public class FrameCreator extends H2O.H2OCountedCompleter {
 
     @Override
     public void map (Chunk[]cs){
+      if (_createFrame.isCancelledOrCrashed()) return;
       if (!_createFrame.randomize) return;
-      final Random rng = new Random();
+      final Random rng = RandomUtils.getRNG(new Random().nextLong());
 
       // response
       if(_createFrame.has_response) {

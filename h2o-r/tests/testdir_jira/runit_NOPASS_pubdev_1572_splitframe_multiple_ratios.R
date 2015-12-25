@@ -1,3 +1,5 @@
+setwd(normalizePath(dirname(R.utils::commandArgs(asValues=TRUE)$"f")))
+source("../../scripts/h2o-r-test-setup.R")
 ################################################################################
 ## PUBDEV-1572
 ##
@@ -6,10 +8,10 @@
 ##
 ################################################################################
 
-setwd(normalizePath(dirname(R.utils::commandArgs(asValues=TRUE)$"f")))
-source('../h2o-runit.R')
 
-test.splitFrame.multiple.ratios <- function(conn) {
+
+
+test.splitFrame.multiple.ratios <- function() {
   hex <- as.h2o(iris)
 
   Log.info("Splits using c(0.1, 0.2), c(0.2, 0.4), c(0.3, 0.6).")
@@ -29,7 +31,7 @@ test.splitFrame.multiple.ratios <- function(conn) {
   expect_equal(small_3, 3*small_1)
   expect_equal(small_2, 2*small_1)
 
-  endTest()
+  
 }
 
 doTest("Using Splitframe on Multiple Ratios", test.splitFrame.multiple.ratios)

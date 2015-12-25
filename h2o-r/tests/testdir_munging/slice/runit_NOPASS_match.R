@@ -1,12 +1,14 @@
-##
-##
-
 setwd(normalizePath(dirname(R.utils::commandArgs(asValues=TRUE)$"f")))
-source('../../h2o-runit.R')
+source("../../../scripts/h2o-r-test-setup.R")
+##
+##
 
-test.match <- function(conn) {
 
-  hex <- as.h2o(conn, iris)
+
+
+test.match <- function() {
+
+  hex <- as.h2o(iris)
 
   #Log.info("Printing the head of the iris data frame.")
   print(hex)
@@ -69,7 +71,7 @@ test.match <- function(conn) {
   expect_true(all(dim(hh_in) == dim(hh_r)))
   expect_true(all(dim(hh_match) == dim(hh_r)))
     
-  testEnd()
+  
 }
 
 doTest("test match", test.match)

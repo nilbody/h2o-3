@@ -1,21 +1,22 @@
+setwd(normalizePath(dirname(R.utils::commandArgs(asValues=TRUE)$"f")))
+source("../../../scripts/h2o-r-test-setup.R")
 ##
 # Comparison of H2O to R with varying link functions for the TWEEDIE family on prostate dataset
 # Link functions: tweedie (canonical link)
 ##
 
-setwd(normalizePath(dirname(R.utils::commandArgs(asValues=TRUE)$"f")))
-source('../../h2o-runit.R')
 
 
-test_linkFunctions <- function(conn) {
+
+
+test_linkFunctions <- function() {
 
   # Use prostate_complete to test tweedie in R glm vs h2o.glm
   # Note that the outcome in this dataset has a bernoulli distribution
   require(statmod)
 
   print("Read in prostate data.")
-  hdf <- h2o.uploadFile("../../../../smalldata/prostate/prostate_complete.csv.zip",
-                        conn, destination_frame = "hdf")
+  hdf <- h2o.uploadFile("../../../../smalldata/prostate/prostate_complete.csv.zip", destination_frame = "hdf")
   df <- as.data.frame(hdf)
 
   print("Testing for family: TWEEDIE")
@@ -50,7 +51,7 @@ test_linkFunctions <- function(conn) {
     checkTrue(difference <= 0.01, "h2o's model's residualDeviance/nullDeviance is more than 0.01 lower than R's model's")
   }
 
-  testEnd()
+  
 }
 
 doTest("Comparison of H2O to R with varying link functions for the TWEEDIE family", test_linkFunctions)

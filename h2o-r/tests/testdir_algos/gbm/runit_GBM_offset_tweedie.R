@@ -1,13 +1,11 @@
-####### This tests tweedie distribution w offset in gbm by comparing results with R ######
 setwd(normalizePath(dirname(R.utils::commandArgs(asValues=TRUE)$"f")))
-source('../../h2o-runit.R')
+source("../../../scripts/h2o-r-test-setup.R")
+####### This tests tweedie distribution w offset in gbm by comparing results with R ######
+
+
 
 test <- function(h) {
-	
-#	install.packages("devtools") 
-#	library(devtools) 
-#	install_github("harrysouthworth/gbm") 
-#	library(gbm)
+
 	library(MASS) 
 	data(Insurance)
 
@@ -32,9 +30,9 @@ test <- function(h) {
 
 	expect_equal(-1.869702, hh@model$init_f, tolerance=1e-5)
 	expect_equal(49.21591, mean(ph[,1]),tolerance=1e-5 )
-	expect_equal(1.0258, min(ph[,1]) ,tolerance=1e-5)
-	expect_equal(392.4651, max(ph[,1]) ,tolerance=1e-5)
+	expect_equal(1.0258, min(ph[,1]) ,tolerance=1e-4)
+	expect_equal(392.4651, max(ph[,1]) ,tolerance=1e-4)
 	
-	testEnd()
+	
 }
 doTest("GBM offset Test: GBM w/ offset for tweedie distribution", test)

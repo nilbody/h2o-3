@@ -1,7 +1,9 @@
 setwd(normalizePath(dirname(R.utils::commandArgs(asValues=TRUE)$"f")))
-source('../h2o-runit.R')
+source("../../scripts/h2o-r-test-setup.R")
 
-test.pubdev.1652 <- function(conn) {
+
+
+test.pubdev.1652 <- function() {
   Log.info("Importing allyears2k.zip data...")
   air.hex <- h2o.importFile(locate("smalldata/airlines/allyears2k.zip"))
   print(summary(air.hex))
@@ -14,7 +16,7 @@ test.pubdev.1652 <- function(conn) {
   fitH2O <- h2o.prcomp(training_frame = air.hex, x = x_cols, k = 1, transform = "STANDARDIZE", pca_method = "GramSVD", max_iterations = 1000, use_all_factor_levels = FALSE, seed = seed)
   print(fitH2O@model)
   
-  testEnd()
+  
 }
 
 doTest("PUBDEV-1652: PCA Core Dump", test.pubdev.1652)

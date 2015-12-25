@@ -22,6 +22,11 @@ public class ModelMetricsRegressionGLM extends ModelMetricsRegression {
   }
 
   @Override
+  public long residualDegreesOfFreedom(){
+    return _residualDegressOfFreedom;
+  }
+
+  @Override
   public String toString() {
     StringBuilder sb = new StringBuilder();
     sb.append(super.toString());
@@ -32,4 +37,5 @@ public class ModelMetricsRegressionGLM extends ModelMetricsRegression {
     sb.append(" AIC: " + (float)_AIC + "\n");
     return sb.toString();
   }
+
 }

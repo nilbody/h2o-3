@@ -1,6 +1,8 @@
-
 setwd(normalizePath(dirname(R.utils::commandArgs(asValues=TRUE)$"f")))
-source('../../h2o-runit.R')
+source("../../../scripts/h2o-r-test-setup.R")
+
+
+
 
 # use this for interactive setup
 #     library(h2o)
@@ -9,7 +11,7 @@ source('../../h2o-runit.R')
 #     conn = h2o.init()
 
 
-test.head_empty <- function(conn) {
+test.head_empty <- function() {
 
     a_initial = data.frame(
     v1=c("a,b","c,d", "e,f",  "e,f"),
@@ -28,7 +30,7 @@ test.head_empty <- function(conn) {
     print(a)
     print(b)
 
-    a.h2o <- as.h2o(conn, a_initial, destination_frame="r.hex")
+    a.h2o <- as.h2o(a_initial, destination_frame="r.hex")
 
     # now we'll create an empty b.h2o in h2o
     b.h2o <- a.h2o[a.h2o$v1==32,]
@@ -43,7 +45,7 @@ test.head_empty <- function(conn) {
     print(head(b.h2o[,1]))
     print(head(b.h2o[1,]))
 
-    testEnd()
+    
 }
 
 doTest("Test for head_empty.", test.head_empty)

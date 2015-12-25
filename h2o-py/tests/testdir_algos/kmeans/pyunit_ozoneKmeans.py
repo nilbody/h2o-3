@@ -1,27 +1,39 @@
+from __future__ import print_function
+from builtins import range
 import sys
-sys.path.insert(1, "../../../")
+sys.path.insert(1,"../../../")
 import h2o
+from tests import pyunit_utils
 
-def ozoneKM(ip, port):
+
+
+
+def ozoneKM():
   # Connect to a pre-existing cluster
-  h2o.init(ip, port)  # connect to localhost:54321
+  # connect to localhost:54321
 
-  train = h2o.import_frame(path=h2o.locate("smalldata/glm_test/ozone.csv"))
+  train = h2o.import_file(path=pyunit_utils.locate("smalldata/glm_test/ozone.csv"))
 
   # See that the data is ready
-  print train.describe()
+  print(train.describe())
 
   # Run KMeans
-  my_km = h2o.kmeans(x=train,
+
+  from h2o.estimators.kmeans import H2OKMeansEstimator
+  my_km = H2OKMeansEstimator(
                      k=10,
                      init = "PlusPlus",
                      max_iterations = 100)
-
+  my_km.train(x = list(range(train.ncol)), training_frame=train)
   my_km.show()
   my_km.summary()
 
   my_pred = my_km.predict(train)
   my_pred.describe()
 
+
+
 if __name__ == "__main__":
-  h2o.run_test(sys.argv, ozoneKM)
+  pyunit_utils.standalone_test(ozoneKM)
+else:
+  ozoneKM()

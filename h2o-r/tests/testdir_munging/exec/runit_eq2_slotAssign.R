@@ -1,3 +1,5 @@
+setwd(normalizePath(dirname(R.utils::commandArgs(asValues=TRUE)$"f")))
+source("../../../scripts/h2o-r-test-setup.R")
 ##
 # Test: [<-
 # Description: Select a dataset, select columns, change values in the column, re-assign col
@@ -5,14 +7,14 @@
 # Author: Spencer
 ##
 
-setwd(normalizePath(dirname(R.utils::commandArgs(asValues=TRUE)$"f")))
-source('../../h2o-runit.R')
+
+
 
 #setupRandomSeed(1689636624)
 
-test.column.assignment <- function(conn) {
+test.column.assignment <- function() {
   set.seed(1841604082)
-  hex <- as.h2o(conn, iris)
+  hex <- as.h2o(iris)
 
   colsToSelect <- 1 #sample(ncol(hex), 1)
 
@@ -37,7 +39,7 @@ test.column.assignment <- function(conn) {
   replacement <- rnorm(numToReplace)
   Log.info("Replacing rows for column selected")
 
-  replacement <- as.h2o(conn, replacement)
+  replacement <- as.h2o(replacement)
 
   print("Wuz replacement one? ")
   print("")
@@ -52,18 +54,13 @@ test.column.assignment <- function(conn) {
 
   hex[rowsToReplace,col] <- replacement
 
-  head(hex)
-
   hexReplaced <- data.frame(col = as.data.frame(hex)[rowsToReplace,col]) 
-
-
-  print(hex)
 
   print(hexReplaced)
 
-  #expect_false(hexReplaced, equals(hexOriginal))
+  expect_false(all(hexReplaced==hexOriginal))
 
-  testEnd()
+  
 
 }
 

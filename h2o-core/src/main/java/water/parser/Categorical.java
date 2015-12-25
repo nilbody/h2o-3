@@ -3,18 +3,17 @@ package water.parser;
 import water.AutoBuffer;
 import water.H2O;
 import water.Iced;
+import water.util.Log;
 import water.nbhm.NonBlockingHashMap;
-import water.util.DocGen.HTML;
+import water.util.PrettyPrint;
 
-import java.util.Arrays;
-import java.util.Map;
 import java.util.concurrent.atomic.AtomicInteger;
 
-/** Class for tracking categorical (enum) columns.
+/** Class for tracking categorical (factor) columns.
  *
  *  Basically a wrapper around non blocking hash map.
  *  In the first pass, we just collect set of unique strings per column
- *  (if there are less than MAX_ENUM_SIZE unique elements).
+ *  (if there are less than MAX_CATEGORICAL_COUNT unique elements).
  *  
  *  After pass1, the keys are sorted and indexed alphabetically.
  *  In the second pass, map is used only for lookup and never updated.
@@ -26,66 +25,66 @@ import java.util.concurrent.atomic.AtomicInteger;
  */
 public final class Categorical extends Iced {
 
-  public static final int MAX_ENUM_SIZE = 10000000;
+  public static final int MAX_CATEGORICAL_COUNT = 10000000;
   AtomicInteger _id = new AtomicInteger();
   int _maxId = -1;
-  volatile NonBlockingHashMap<ValueString, Integer> _map;
-  boolean maxEnumExceeded = false;
+  volatile NonBlockingHashMap<BufferedString, Integer> _map;
+  boolean maxDomainExceeded = false;
 
   Categorical() { _map = new NonBlockingHashMap<>(); }
 
-  private Categorical(int id, NonBlockingHashMap<ValueString, Integer> map) {
-    _id = new AtomicInteger(id);
-    _map = map;
-  }
-  Categorical deepCopy() {
-    return new Categorical(_id.get(), _map==null ? null : (NonBlockingHashMap<ValueString,Integer>)_map.clone());
-  }
   /** Add key to this map (treated as hash set in this case). */
-  int addKey(ValueString str) {
-    // _map is shared and be cast to null (if enum is killed) -> grab local copy
-    NonBlockingHashMap<ValueString, Integer> m = _map;
+  int addKey(BufferedString str) {
+    // _map is shared and be cast to null (if categorical is killed) -> grab local copy
+    NonBlockingHashMap<BufferedString, Integer> m = _map;
     if( m == null ) return Integer.MAX_VALUE;     // Nuked already
     Integer res = m.get(str);
     if( res != null ) return res; // Recorded already
     assert str.length() < 65535; // Length limit so 65535 can be used as a sentinel
     int newVal = _id.incrementAndGet();
-    res = m.putIfAbsent(new ValueString(str), newVal);
+    res = m.putIfAbsent(new BufferedString(str), newVal);
     if( res != null ) return res;
-    if( m.size() > MAX_ENUM_SIZE ) maxEnumExceeded = true;
+    if( m.size() > MAX_CATEGORICAL_COUNT) maxDomainExceeded = true;
     return newVal;
   }
-  final boolean containsKey(ValueString key){ return _map.containsKey(key); }
+  final boolean containsKey(BufferedString key){ return _map.containsKey(key); }
   @Override public String toString() {
     return "{"+_map+" }";
   }
 
-  int getTokenId( ValueString str ) { return _map.get(str); }
+  int getTokenId( BufferedString str ) { return _map.get(str); }
   
-  void merge(Categorical other){
-    if( this == other ) return;
-    if( isMapFull() ) return;
-    if( !other.isMapFull() ) {   // do the merge
-      Map<ValueString, Integer> myMap = _map;
-      Map<ValueString, Integer> otMap = other._map;
-      if( myMap == otMap ) return;
-      for( ValueString str : otMap.keySet() )
-        myMap.put(str, 1);
-      if( myMap.size() <= MAX_ENUM_SIZE ) return;
-    }
-    maxEnumExceeded = true; // too many values, enum should be killed!
-  }
   int maxId() { return _maxId == -1 ? _id.get() : _maxId; }
   int size() { return _map.size(); }
-  boolean isMapFull() { return maxEnumExceeded; }
+  boolean isMapFull() { return maxDomainExceeded; }
 
-  // assuming single threaded
-  ValueString [] computeColumnDomain() {
-    ValueString vs[] = _map.keySet().toArray(new ValueString[_map.size()]);
-    Arrays.sort(vs);            // Alpha sort to be nice
-    for( int j = 0; j < vs.length; ++j )
-      _map.put(vs[j], j);       // Renumber in the map
-    return vs;
+  BufferedString[] getColumnDomain() {
+    return  _map.keySet().toArray(new BufferedString[_map.size()]);
+  }
+
+  public static final int MAX_EXAMPLES = 10;
+  public void convertToUTF8(int col){
+    int hexConvCnt = 0;
+    BufferedString[] bStrs = _map.keySet().toArray(new BufferedString[_map.size()]);
+    StringBuilder hexSB = new StringBuilder();
+    for (int i =0; i < bStrs.length; i++) {
+      String s = bStrs[i].toString();
+      if (!bStrs[i].equals(s)) {
+        if (s.contains("\uFFFD")) { // make weird chars into hex
+          s = bStrs[i].bytesToString();
+          if (hexConvCnt++ < MAX_EXAMPLES) hexSB.append(s +", ");
+          if (hexConvCnt == MAX_EXAMPLES) hexSB.append("...");
+        }
+        int val = _map.get(bStrs[i]);
+        _map.remove(bStrs[i]);
+        bStrs[i] = new BufferedString(s);
+        _map.put(bStrs[i], val);
+      }
+    }
+    if (hexConvCnt > 0) Log.info("Found categoricals with non-UTF-8 characters in the "
+        + PrettyPrint.withOrdinalIndicator(col)
+        + " column. Converting unrecognized characters into hex:  "
+        + hexSB.toString());
   }
 
   // Since this is a *concurrent* hashtable, writing it whilst its being
@@ -98,7 +97,7 @@ public final class Categorical extends Iced {
     if( _map == null ) return ab.put1(1); // Killed map marker
     ab.put1(0);                           // Not killed
     ab.put4(maxId());
-    for( ValueString key : _map.keySet() )
+    for( BufferedString key : _map.keySet() )
       ab.put2((char)key.length()).putA1(key.getBuffer(),key.length()).put4(_map.get(key));
     return ab.put2((char)65535); // End of map marker
   }
@@ -111,12 +110,11 @@ public final class Categorical extends Iced {
     _map = new NonBlockingHashMap<>();
     int len;
     while( (len = ab.get2()) != 65535 ) // Read until end-of-map marker
-      _map.put(new ValueString(ab.getA1(len)),ab.get4());
+      _map.put(new BufferedString(ab.getA1(len)),ab.get4());
     return this;
   }
   @Override public AutoBuffer writeJSON_impl( AutoBuffer ab ) {
     throw H2O.unimpl();
   }
   @Override public Categorical readJSON_impl( AutoBuffer ab ) { throw H2O.unimpl(); }
-  @Override public HTML writeHTML_impl( HTML ab ) { throw H2O.unimpl(); }
 }

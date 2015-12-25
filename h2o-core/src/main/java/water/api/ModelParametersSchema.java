@@ -1,6 +1,7 @@
 package water.api;
 
 import hex.Model;
+import hex.ScoreKeeper;
 import water.*;
 import water.api.KeyV3.FrameKeyV3;
 import water.api.KeyV3.ModelKeyV3;
@@ -42,7 +43,7 @@ public class ModelParametersSchema<P extends Model.Parameters, S extends ModelPa
   @API(help="Training frame", direction=API.Direction.INOUT /* Not required, to allow initial params validation: , required=true */)
   public FrameKeyV3 training_frame;
 
-  @API(help="Validation frame", direction=API.Direction.INOUT)
+  @API(help="Validation frame", direction=API.Direction.INOUT, gridable = true)
   public FrameKeyV3 validation_frame;
 
   @API(help="Number of folds for N-fold cross-validation", level = API.Level.critical, direction= API.Direction.INOUT)
@@ -51,19 +52,19 @@ public class ModelParametersSchema<P extends Model.Parameters, S extends ModelPa
   @API(help="Keep cross-validation model predictions", level = API.Level.expert, direction=API.Direction.INOUT)
   public boolean keep_cross_validation_predictions;
 
-  @API(help = "Response column", is_member_of_frames = {"training_frame", "validation_frame"}, is_mutually_exclusive_with = {"ignored_columns"}, direction = API.Direction.INOUT)
+  @API(help = "Response column", is_member_of_frames = {"training_frame", "validation_frame"}, is_mutually_exclusive_with = {"ignored_columns"}, direction = API.Direction.INOUT, gridable = true)
   public FrameV3.ColSpecifierV3 response_column;
 
-  @API(help = "Column with observation weights", is_member_of_frames = {"training_frame", "validation_frame"}, is_mutually_exclusive_with = {"ignored_columns","response_column"}, direction = API.Direction.INOUT)
+  @API(help = "Column with observation weights", level = API.Level.secondary, is_member_of_frames = {"training_frame", "validation_frame"}, is_mutually_exclusive_with = {"ignored_columns","response_column"}, direction = API.Direction.INOUT)
   public FrameV3.ColSpecifierV3 weights_column;
 
-  @API(help = "Offset column", is_member_of_frames = {"training_frame", "validation_frame"}, is_mutually_exclusive_with = {"ignored_columns","response_column", "weights_column"}, direction = API.Direction.INOUT)
+  @API(help = "Offset column", level = API.Level.secondary, is_member_of_frames = {"training_frame", "validation_frame"}, is_mutually_exclusive_with = {"ignored_columns","response_column", "weights_column"}, direction = API.Direction.INOUT)
   public FrameV3.ColSpecifierV3 offset_column;
 
-  @API(help = "Column with cross-validation fold index assignment per observation", is_member_of_frames = {"training_frame"}, is_mutually_exclusive_with = {"ignored_columns","response_column", "weights_column", "offset_column"}, direction = API.Direction.INOUT)
+  @API(help = "Column with cross-validation fold index assignment per observation", level = API.Level.secondary, is_member_of_frames = {"training_frame"}, is_mutually_exclusive_with = {"ignored_columns","response_column", "weights_column", "offset_column"}, direction = API.Direction.INOUT)
   public FrameV3.ColSpecifierV3 fold_column;
 
-  @API(help="Cross-validation fold assignment scheme, if fold_column is not specified", values = {"AUTO", "Random", "Modulo"}, level = API.Level.expert, direction=API.Direction.INOUT)
+  @API(help="Cross-validation fold assignment scheme, if fold_column is not specified", values = {"AUTO", "Random", "Modulo", "Stratified"}, level = API.Level.secondary, direction=API.Direction.INOUT)
   public Model.Parameters.FoldAssignmentScheme fold_assignment;
 
   @API(help="Ignored columns", is_member_of_frames={"training_frame", "validation_frame"}, direction=API.Direction.INOUT)
@@ -83,6 +84,23 @@ public class ModelParametersSchema<P extends Model.Parameters, S extends ModelPa
   @API(help = "Model checkpoint to resume training with", level = API.Level.secondary, direction=API.Direction.INOUT)
   public ModelKeyV3 checkpoint;
 
+  /**
+   * Early stopping based on convergence of stopping_metric.
+   * Stop if simple moving average of length k of the stopping_metric does not improve (by stopping_tolerance) for k=stopping_rounds scoring events."
+   * Can only trigger after at least 2k scoring events. Use 0 to disable.
+   */
+  @API(help = "Early stopping based on convergence of stopping_metric. Stop if simple moving average of length k of the stopping_metric does not improve for k:=stopping_rounds scoring events (0 to disable)", level = API.Level.secondary, direction=API.Direction.INOUT, gridable = true)
+  public int stopping_rounds;
+
+  /**
+   * Metric to use for convergence checking, only for _stopping_rounds > 0
+   */
+  @API(help = "Metric to use for early stopping (AUTO: logloss for classification, deviance for regression)", values = {"AUTO", "deviance", "logloss", "MSE", "AUC", "lift_top_decile", "r2", "misclassification"}, level = API.Level.secondary, direction=API.Direction.INOUT, gridable = true)
+  public ScoreKeeper.StoppingMetric stopping_metric;
+
+  @API(help = "Relative tolerance for metric-based stopping criterion Relative tolerance for metric-based stopping criterion (stop if relative improvement is not at least this much)", level = API.Level.secondary, direction=API.Direction.INOUT, gridable = true)
+  public double stopping_tolerance;
+
   protected static String[] append_field_arrays(String[] first, String[] second) {
     String[] appended = new String[first.length + second.length];
     System.arraycopy(first, 0, appended, 0, first.length);
@@ -91,7 +109,7 @@ public class ModelParametersSchema<P extends Model.Parameters, S extends ModelPa
   }
 
   public S fillFromImpl(P impl) {
-    PojoUtils.copyProperties(this, impl, PojoUtils.FieldNaming.ORIGIN_HAS_UNDERSCORES );
+    PojoUtils.copyProperties(this, impl, PojoUtils.FieldNaming.ORIGIN_HAS_UNDERSCORES);
 
     if (null != impl._train) {
       Value v = DKV.get(impl._train);

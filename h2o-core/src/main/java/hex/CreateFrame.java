@@ -56,8 +56,9 @@ public class CreateFrame extends Job<Frame> {
             + rows * 1 //response is
             : 0; // all constants - should be small
 
-    if (byte_estimate > H2O.CLOUD._memary[0].get_max_mem() * H2O.CLOUD.size())
-      throw new IllegalArgumentException("Frame is expected to require " + PrettyPrint.bytes((long) byte_estimate) + ", won't fit into H2O's memory.");
+    long cluster_free_mem = H2O.CLOUD.free_mem();
+    if (byte_estimate > cluster_free_mem)
+      throw new IllegalArgumentException("Frame is expected to require " + PrettyPrint.bytes((long) byte_estimate) + ", won't fit into H2O's free memory of "+ cluster_free_mem);
 
     if (!randomize) {
       if (integer_fraction != 0 || categorical_fraction != 0)
@@ -66,7 +67,7 @@ public class CreateFrame extends Job<Frame> {
       if (value != 0)
         throw new IllegalArgumentException("Cannot set data to a constant value if randomize=true.");
     }
-    if (_dest == null) throw new IllegalArgumentException("Destination key cannot be null.");
+    if (_dest == null) throw new IllegalArgumentException("Destination frame name cannot be null.");
 
     FrameCreator fc = new FrameCreator(this, this._key);
     start(fc, fc.nChunks()*5, true);

@@ -5,10 +5,9 @@ import water.Job;
 import water.Key;
 import water.Keyed;
 import water.api.KeyV3.JobKeyV3;
-import water.util.DocGen.HTML;
+import water.exceptions.H2OFailException;
 import water.util.Log;
 import water.util.PojoUtils;
-import water.util.PrettyPrint;
 import water.util.ReflectionUtils;
 
 /** Schema for a single Job. */
@@ -43,13 +42,6 @@ public class JobV3<J extends Job, S extends JobV3<J, S>> extends Schema<J, S> {
   @API(help="exception", direction=API.Direction.OUTPUT)
   public String exception;
 
-  @API(help="Info, warning and error messages; NOTE: can be appended to while the Job is running", direction=API.Direction.OUTPUT)
-  public ValidationMessageBase messages[];
-
-  @API(help="Count of error messages", direction=API.Direction.OUTPUT)
-  public int error_count;
-
-
   //==========================
   // Custom adapters go here
 
@@ -80,44 +72,21 @@ public class JobV3<J extends Job, S extends JobV3<J, S>> extends Schema<J, S> {
     msec = (job.isStopped() ? job._end_time : System.currentTimeMillis())-job._start_time;
     Key dest_key = job.dest();
     Class<? extends Keyed> dest_class = ReflectionUtils.findActualClassParameter(job.getClass(), 0); // What type do we expect for this Job?
-    dest = KeyV3.forKeyedClass(dest_class, dest_key);
-    exception = job._exception;
-
-    // NOTE: the message list can be getting longer in another thread; copy so we don't have a race.
-    Job.ValidationMessage[] vms = job._messages;
-    int num_messages = vms.length;
-    this.messages = new ValidationMessageBase[num_messages];
-    this.error_count = 0;
-
-    for( int i = 0; i < num_messages; ) {
-      Job.ValidationMessage vm = vms[i];
-      if (null == vm) {
-        break;
-      }
-      this.messages[i] = new ValidationMessageV3().fillFromImpl(vm); // TODO: version
-      if (vm.getMessageType() == Job.ValidationMessage.MessageType.ERROR) {
-        this.error_count++;
-      }
-      i++;
+    try {
+      dest = KeyV3.forKeyedClass(dest_class, dest_key);
     }
-
+    catch (H2OFailException e) {
+      throw e;
+    }
+    catch (Exception e) {
+      dest = null;
+      Log.warn("JobV3.fillFromImpl(): dest key for job: " + this + " is not the expected type: " + dest_class.getCanonicalName() + ": " + dest_key + ".  Returning null for the dest field.");
+    }
+    exception = job._exception;
     return (S) this;
   }
 
   //==========================
   // Helper so Jobs can link to JobPoll
   public static String link(Key key) { return "/Jobs/"+key; }
-
-  @Override public HTML writeHTML_impl( HTML ab ) {
-    ab.title("Job Poll");
-    if( "DONE".equals(status) ) {
-      Job job = (Job)Key.make(key.name).get();
-      String url = "deprecated"; // InspectV1.link(job.dest());
-      ab.href("Inspect",url,url).putStr("status",status).put4f("progress",progress);
-    } else {
-      String url = link(key.key());
-      ab.href("JobPoll",url,url).putStr("status",status).put4f("progress",progress);
-  }
-    return ab.putStr("msec",PrettyPrint.msecs(msec,false)).putStr("exception",exception);
-  }
 }

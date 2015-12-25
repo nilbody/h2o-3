@@ -1,19 +1,28 @@
+from __future__ import print_function
+from builtins import range
 import sys
-sys.path.insert(1, "../../../")
+sys.path.insert(1,"../../../")
 import h2o
+from tests import pyunit_utils
+from h2o.estimators.glm import H2OGeneralizedLinearEstimator
+
+
 import random
 
-def grid_lambda_search(ip,port):
-  # Connect to h2o
-  h2o.init(ip,port)
+def grid_lambda_search():
+  
+  
 
   # Log.info("Importing prostate.csv data...\n")
-  prostate = h2o.import_frame(path=h2o.locate("smalldata/logreg/prostate.csv"))
+  prostate = h2o.import_file(path=pyunit_utils.locate("smalldata/logreg/prostate.csv"))
 
   #prostate.summary()
 
   # Log.info("H2O GLM (binomial) with parameters: alpha = c(0.25, 0.5), nlambda = 20, lambda_search = TRUE, nfolds: 2\n")
-  model = h2o.glm(x=prostate[2:9], y=prostate[1], family="binomial", nlambdas=5, lambda_search=True, n_folds=2)
+  model = H2OGeneralizedLinearEstimator(family="binomial", nlambdas=5, lambda_search=True, n_folds=2)
+  model.train(x=list(range(2,9)), y=1, training_frame=prostate)
+
+#  model = h2o.glm(x=prostate[2:9], y=prostate[1], family="binomial", nlambdas=5, lambda_search=True, n_folds=2)
   if random.random() < 0.5:
     model_idx = 0
   else:
@@ -43,7 +52,9 @@ def grid_lambda_search(ip,port):
   assert best_model.model() ==  model_bestlambda.model(), "expected models to be equal"
 
   # Log.info("H2O GLM (binomial) with parameters: alpha = [0.25, 0.5], nlambda = 20, lambda_search = TRUE, nfolds: 2\n")
-  prostate_search = h2o.glm(x=prostate[2:9], y=prostate[1], family="binomial", alpha=[0.25, 0.5], nlambdas=5, lambda_search=True, n_folds=2)
+  prostate_search = H2OGeneralizedLinearEstimator(family="binomial", alpha=[0.25, 0.5], nlambdas=5, lambda_search=True, n_folds=2)
+  prostate_search.train(x=list(range(2,9)),y=1,training_frame=prostate)
+#  prostate_search = h2o.glm(x=prostate[2:9], y=prostate[1], family="binomial", alpha=[0.25, 0.5], nlambdas=5, lambda_search=True, n_folds=2)
   model_search = prostate_search.models(model_idx)
   models_best = model_search.models(model_search.best_model())
   params_best = models_best.params()
@@ -51,5 +62,9 @@ def grid_lambda_search(ip,port):
   assert params_bestlambda.lambda_best() == params_best.lambda_best(), "expected lambdas to be equal"
   assert len(params_best.lambda_all()) <= 20, "expected 20 or fewer lambdas"
 
+
+
 if __name__ == "__main__":
-  h2o.run_test(sys.argv, grid_lambda_search)
+    pyunit_utils.standalone_test(grid_lambda_search)
+else:
+    grid_lambda_search()

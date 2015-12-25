@@ -1,12 +1,14 @@
+setwd(normalizePath(dirname(R.utils::commandArgs(asValues=TRUE)$"f")))
+source("../../scripts/h2o-r-test-setup.R")
 ################################################################################
 ##
 ## Verifying that R can define features as categorical or continuous
 ##
 ################################################################################
-setwd(normalizePath(dirname(R.utils::commandArgs(asValues=TRUE)$"f")))
-source('../h2o-runit.R')
 
-test.continuous.or.categorical <- function(conn) {
+
+
+test.continuous.or.categorical <- function() {
   aa <- data.frame(
     h1 = c( 1, 8, 4, 3, 6),
     h2 = c('fish', 'cat', 'fish', 'dog', 'bird'),
@@ -46,7 +48,7 @@ test.continuous.or.categorical <- function(conn) {
   print(df.hex)
   print(summary(df.hex))
 
-  testEnd()
+  
 }
 
 doTest("Testing Conversions to Categorical and Continuous Values", test.continuous.or.categorical)

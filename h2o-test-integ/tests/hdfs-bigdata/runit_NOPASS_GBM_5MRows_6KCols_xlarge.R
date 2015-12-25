@@ -1,10 +1,9 @@
+setwd(normalizePath(dirname(R.utils::commandArgs(asValues=TRUE)$"f")))
+source("../../../h2o-r/scripts/h2o-r-test-setup.R")
 #----------------------------------------------------------------------
 # Purpose:  This test exercises building GLM/GBM/DL  model 
 #           for 376K rows and 6.9K columns 
 #----------------------------------------------------------------------
-    
-setwd(normalizePath(dirname(R.utils::commandArgs(asValues=TRUE)$"f")))
-source('../h2o-runit-hadoop.R') 
 
 ipPort <- get_args(commandArgs(trailingOnly = TRUE))
 myIP   <- ipPort[[1]]
@@ -15,8 +14,8 @@ print(hdfs_name_node)
 library(RCurl)
 library(h2o)
 
-heading("BEGIN TEST")
-conn <- h2o.init(ip=myIP, port=myPort, startH2O = FALSE)
+#heading("BEGIN TEST")
+h2o.init(ip=myIP, port=myPort, startH2O = FALSE)
 h2o.removeAll()
 
 hdfs_data_file = "/datasets/bigdata/5MRows6KCols.csv"
@@ -24,7 +23,7 @@ hdfs_data_file = "/datasets/bigdata/5MRows6KCols.csv"
 # Parameters for the test.
 #----------------------------------------------------------------------
 url <- sprintf("hdfs://%s%s", hdfs_name_node, hdfs_data_file)
-parse_time <- system.time(data.hex <- h2o.importFile(conn, url))
+parse_time <- system.time(data.hex <- h2o.importFile(url))
 print("Time it took to parse")
 print(parse_time)
 
@@ -43,4 +42,4 @@ model.gbm
 pred = predict(model.gbm, valid)
 perf <- h2o.performance(model.gbm, valid)
 
-PASS_BANNER()
+

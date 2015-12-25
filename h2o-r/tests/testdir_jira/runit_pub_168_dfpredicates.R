@@ -1,16 +1,18 @@
+setwd(normalizePath(dirname(R.utils::commandArgs(asValues=TRUE)$"f")))
+source("../../scripts/h2o-r-test-setup.R")
 #
 # test filtering via factors
 #
 
 
-setwd(normalizePath(dirname(R.utils::commandArgs(asValues=TRUE)$"f")))
-source('../h2o-runit.R')
 
 
 
-factorfilter <- function(conn){
+
+
+factorfilter <- function(){
   Log.info('uploading ddply testing dataset')
-  df.h <- h2o.importFile(conn, normalizePath(locate('smalldata/jira/pub-180.csv')))
+  df.h <- h2o.importFile(normalizePath(locate('smalldata/jira/pub-180.csv')))
 
   Log.info('printing from h2o')
   Log.info( head(df.h) )
@@ -52,7 +54,7 @@ factorfilter <- function(conn){
   expect_that( df.3[1,3], equals(5 ))
   expect_that( df.3[1,4], equals(6 ))
 
-  testEnd()
+  
 }
 
 if(F){

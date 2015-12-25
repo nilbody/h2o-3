@@ -1,19 +1,38 @@
 package water.init;
 
-import water.H2O;
-import water.H2ONode;
-import water.JettyHTTPD;
-import water.TCPReceiverThread;
-import water.util.Log;
-
-import java.io.*;
-import java.net.*;
+import java.io.BufferedReader;
+import java.io.ByteArrayInputStream;
+import java.io.File;
+import java.io.FileInputStream;
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.InputStreamReader;
+import java.net.DatagramPacket;
+import java.net.Inet4Address;
+import java.net.InetAddress;
+import java.net.InetSocketAddress;
+import java.net.MulticastSocket;
+import java.net.NetworkInterface;
+import java.net.ServerSocket;
+import java.net.Socket;
+import java.net.SocketException;
+import java.net.UnknownHostException;
 import java.nio.ByteBuffer;
 import java.nio.channels.DatagramChannel;
 import java.nio.channels.ServerSocketChannel;
-import java.util.*;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.Comparator;
+import java.util.Enumeration;
+import java.util.HashSet;
+import java.util.List;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+
+import water.H2O;
+import water.H2ONode;
+import water.JettyHTTPD;
+import water.util.Log;
 
 /**
  * Data structure for holding network info specified by the user on the command line.
@@ -81,7 +100,14 @@ public class NetworkInit {
 
   }
 
-  // Start up an H2O Node and join any local Cloud
+  /**
+   * Finds inetaddress for specified -ip parameter or
+   * guess address if parameter is not specified.
+   *
+   * It also computes address for web server if -web-ip parameter is passed.
+   *
+   * @return inet address for this node.
+   */
   public static InetAddress findInetAddressForSelf() throws Error {
     if( H2O.SELF_ADDRESS != null) return H2O.SELF_ADDRESS;
     if ((H2O.ARGS.ip != null) && (H2O.ARGS.network != null)) {
@@ -102,23 +128,8 @@ public class NetworkInit {
 
     // Check for an "-ip xxxx" option and accept a valid user choice; required
     // if there are multiple valid IP addresses.
-    InetAddress arg = null;
     if (H2O.ARGS.ip != null) {
-      try{
-        arg = InetAddress.getByName(H2O.ARGS.ip);
-      } catch( UnknownHostException e ) {
-        Log.err(e);
-        H2O.exit(-1);
-      }
-      if( !(arg instanceof Inet4Address) ) {
-        Log.warn("Only IP4 addresses allowed.");
-        H2O.exit(-1);
-      }
-      if( !ips.contains(arg) ) {
-        Log.warn("IP address not found on this machine");
-        H2O.exit(-1);
-      }
-      local = arg;
+      local = getInetAddress(H2O.ARGS.ip, ips);
     } else if (networkList.size() > 0) {
       // Return the first match from the list, if any.
       // If there are no matches, then exit.
@@ -189,6 +200,31 @@ public class NetworkInit {
       Log.warn(m);
       if( s != null ) try { s.close(); } catch( java.io.IOException ie ) { }
     }
+  }
+
+  private static InetAddress getInetAddress(String ip, List<InetAddress> allowedIps) {
+    InetAddress addr = null;
+
+    if (ip != null) {
+      try {
+        addr = InetAddress.getByName(ip);
+      } catch (UnknownHostException e) {
+        Log.err(e);
+        H2O.exit(-1);
+      }
+      if (!(addr instanceof Inet4Address)) {
+        Log.warn("Only IP4 addresses allowed.");
+        H2O.exit(-1);
+      }
+      if (allowedIps != null) {
+        if (!allowedIps.contains(addr)) {
+          Log.warn("IP address not found on this machine");
+          H2O.exit(-1);
+        }
+      }
+    }
+
+    return addr;
   }
 
   /**
@@ -306,7 +342,8 @@ public class NetworkInit {
   }
 
   public static DatagramChannel _udpSocket;
-  public static ServerSocket _apiSocket;
+  public static ServerSocketChannel _tcpSocket;
+
   // Default NIO Datagram channel
   public static DatagramChannel CLOUD_DGRAM;
 
@@ -322,6 +359,11 @@ public class NetworkInit {
       H2O.setJetty(new JettyHTTPD());
     }
 
+    // API socket is only used to find opened port on given ip.
+    ServerSocket apiSocket = null;
+
+    // At this point we would like to allocate 3 consecutive ports
+    //
     while (true) {
       H2O.H2O_PORT = H2O.API_PORT+1;
       try {
@@ -335,38 +377,42 @@ public class NetworkInit {
         // Enabling SO_REUSEADDR prior to binding the socket using bind(SocketAddress)
         // allows the socket to be bound even though a previous connection is in a timeout state.
         // cnc: this is busted on windows.  Back to the old code.
-        _apiSocket = H2O.ARGS.ip == null
-                ? new ServerSocket(H2O.API_PORT)
-                : new ServerSocket(H2O.API_PORT, -1/*defaultBacklog*/, H2O.SELF_ADDRESS);
-        _apiSocket.setReuseAddress(true);
+        if (!H2O.ARGS.disable_web) {
+          apiSocket = H2O.ARGS.web_ip == null // Listen to any interface
+                      ? new ServerSocket(H2O.API_PORT)
+                      : new ServerSocket(H2O.API_PORT, -1, getInetAddress(H2O.ARGS.web_ip, null));
+          apiSocket.setReuseAddress(true);
+        }
         // Bind to the UDP socket
         _udpSocket = DatagramChannel.open();
         _udpSocket.socket().setReuseAddress(true);
         InetSocketAddress isa = new InetSocketAddress(H2O.SELF_ADDRESS, H2O.H2O_PORT);
         _udpSocket.socket().bind(isa);
         // Bind to the TCP socket also
-        TCPReceiverThread.SOCK = ServerSocketChannel.open();
-        TCPReceiverThread.SOCK.socket().setReceiveBufferSize(water.AutoBuffer.TCP_BUF_SIZ);
-        TCPReceiverThread.SOCK.socket().bind(isa);
+        _tcpSocket = ServerSocketChannel.open();
+        _tcpSocket.socket().setReceiveBufferSize(water.AutoBuffer.TCP_BUF_SIZ);
+        _tcpSocket.socket().bind(isa);
 
-        _apiSocket.close();
+        // Warning: There is a ip:port race between socket close and starting Jetty
         if (! H2O.ARGS.disable_web) {
-          H2O.getJetty().start(H2O.ARGS.ip, H2O.API_PORT);
+          apiSocket.close();
+          H2O.getJetty().start(H2O.ARGS.web_ip, H2O.API_PORT);
         }
         break;
       } catch (Exception e) {
-        if( _apiSocket != null ) try { _apiSocket.close(); } catch( IOException ohwell ) { Log.err(ohwell); }
+        if( apiSocket != null ) try { apiSocket.close(); } catch( IOException ohwell ) { Log.err(ohwell); }
         if( _udpSocket != null ) try { _udpSocket.close(); } catch( IOException ie ) { }
-        if( TCPReceiverThread.SOCK != null ) try { TCPReceiverThread.SOCK.close(); } catch( IOException ie ) { }
-        _apiSocket = null;
+        if( _tcpSocket != null ) try { _tcpSocket.close(); } catch( IOException ie ) { }
+        apiSocket = null;
         _udpSocket = null;
-        TCPReceiverThread.SOCK = null;
+        _tcpSocket = null;
         if( H2O.ARGS.port != 0 )
           H2O.die("On " + H2O.SELF_ADDRESS +
               " some of the required ports " + H2O.ARGS.port +
               ", " + (H2O.ARGS.port+1) +
               " are not available, change -port PORT and try again.");
       }
+      // Try next available port to bound
       H2O.API_PORT += 2;
     }
     H2O.SELF = H2ONode.self(H2O.SELF_ADDRESS);
@@ -412,12 +458,12 @@ public class NetworkInit {
   // Multicast send-and-close.  Very similar to udp_send, except to the
   // multicast port (or all the individuals we can find, if multicast is
   // disabled).
-  public static void multicast( ByteBuffer bb ) {
-    try { multicast2(bb); }
+  public static void multicast( ByteBuffer bb , byte priority) {
+    try { multicast2(bb, priority); }
     catch (Exception ie) {}
   }
 
-  static private void multicast2( ByteBuffer bb ) {
+  static private void multicast2( ByteBuffer bb, byte priority ) {
     if( H2O.STATIC_H2OS == null ) {
       byte[] buf = new byte[bb.remaining()];
       bb.get(buf);
@@ -471,9 +517,13 @@ public class NetworkInit {
       nodes.addAll(water.Paxos.PROPOSED.values());
       bb.mark();
       for( H2ONode h2o : nodes ) {
-        bb.reset();
         try {
-          CLOUD_DGRAM.send(bb, h2o._key);
+          if(H2O.ARGS.useUDP) {
+            bb.reset();
+            CLOUD_DGRAM.send(bb, h2o._key);
+          } else {
+            h2o.sendMessage(bb,priority);
+          }
         } catch( IOException e ) {
           Log.warn("Multicast Error to "+h2o, e);
         }

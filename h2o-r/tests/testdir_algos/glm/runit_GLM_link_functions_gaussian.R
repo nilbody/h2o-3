@@ -1,3 +1,5 @@
+setwd(normalizePath(dirname(R.utils::commandArgs(asValues=TRUE)$"f")))
+source("../../../scripts/h2o-r-test-setup.R")
 ##
 # Comparison of H2O to R with varying link functions for the GAUSSIAN family on prostate dataset
 # Link functions: identity (canonical link)
@@ -5,14 +7,14 @@
 #				  inverse
 ##
 
-setwd(normalizePath(dirname(R.utils::commandArgs(asValues=TRUE)$"f")))
-source('../../h2o-runit.R')
 
 
-test.linkFunctions <- function(conn) {
+
+
+test.linkFunctions <- function() {
 
 	print("Read in prostate data.")
-	h2o.data = h2o.uploadFile(conn, locate("smalldata/prostate/prostate_complete.csv.zip"), destination_frame="h2o.data")    
+	h2o.data = h2o.uploadFile(locate("smalldata/prostate/prostate_complete.csv.zip"), destination_frame="h2o.data")    
 #	print(head(h2o.data))
         head(h2o.data)
 	R.data = as.data.frame(as.matrix(h2o.data))
@@ -82,7 +84,7 @@ test.linkFunctions <- function(conn) {
 	# 	checkTrue(difference <= 0.01, "h2o's model's residualDeviance/nullDeviance is more than 0.01 lower than R's model's")
 	# }
 	
-testEnd()
+
 }
 
 doTest("Comparison of H2O to R with varying link functions for the GAUSSIAN family", test.linkFunctions)

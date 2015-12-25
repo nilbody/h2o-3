@@ -1,10 +1,12 @@
 setwd(normalizePath(dirname(R.utils::commandArgs(asValues=TRUE)$"f")))
-source('../h2o-runit.R')
+source("../../scripts/h2o-r-test-setup.R")
 
-test.h2o.nfold <- function(conn) {
+
+
+test.h2o.nfold <- function() {
   tolerance <- 1e-2
 
-  hex <- h2o.importFile(conn, normalizePath(locate("smalldata/logreg/prostate.csv")))
+  hex <- h2o.importFile(normalizePath(locate("smalldata/logreg/prostate.csv")))
   predictors = c(3:9)
   response = 2
   NFOLDS = 4
@@ -29,8 +31,8 @@ test.h2o.nfold <- function(conn) {
   }
 
   # compare metrics
-  perf_auc <- h2o.performance(as.h2o(conn,predictions), hex[,response], measure = "F1")
-  perf_cm <- h2o.performance(as.h2o(conn,predictions), hex[,response], thresholds = m@model$best_cutoff)
+  perf_auc <- h2o.performance(as.h2o(predictions), hex[,response], measure = "F1")
+  perf_cm <- h2o.performance(as.h2o(predictions), hex[,response], thresholds = m@model$best_cutoff)
   auc <- m@model$auc
   accuracy <- m@model$accuracy
   cm <- m@model$confusion
@@ -47,7 +49,7 @@ test.h2o.nfold <- function(conn) {
   perf_cm@model$confusion
   if (max(abs(cm[1:9] - perf_cm@model$confusion[1:9])) > 2) stop("cm is wrong")
 
-  testEnd()
+  
 }
 
 doTest("Test H2O N-Fold CV", test.h2o.nfold)

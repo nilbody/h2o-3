@@ -1,5 +1,6 @@
 package water.util;
 
+import org.eclipse.jetty.io.EofException;
 import water.Key;
 
 import java.io.*;
@@ -22,7 +23,7 @@ public class FileUtils {
   public static void copyStream(InputStream is, OutputStream os, final int buffer_size) {
     try {
       byte[] bytes=new byte[buffer_size];
-      for(;;)
+      while( is.available() > 0 )
       {
         int count=is.read(bytes, 0, buffer_size);
         if(count<=0)
@@ -30,22 +31,19 @@ public class FileUtils {
         os.write(bytes, 0, count);
       }
     }
+    catch(EofException eofe) {
+      // no problem
+    }
     catch(Exception ex) {
       throw new RuntimeException(ex);
     }
   }
 
   public static URI getURI(String path) {
-    File[] roots = File.listRoots();
-    if (path.startsWith("./")) { // It is relative path
-      return new File(path).toURI();
-    } else {
-      for (File root : roots) { // It is local absolute path
-        if (path.startsWith(root.getAbsolutePath())) {
-          return new File(path).toURI();
-        }
-      }
+    if (path.contains(":/")) { // Seems like
       return URI.create(path);
+    } else {
+      return new File(path).toURI();
     }
   }
 

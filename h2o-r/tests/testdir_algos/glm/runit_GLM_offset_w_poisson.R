@@ -1,9 +1,11 @@
+setwd(normalizePath(dirname(R.utils::commandArgs(asValues=TRUE)$"f")))
+source("../../../scripts/h2o-r-test-setup.R")
 ### This tests offset in glm on real data ######
 
-setwd(normalizePath(dirname(R.utils::commandArgs(asValues=TRUE)$"f")))
-source('../../h2o-runit.R')
 
-test <- function(h) {
+
+
+test <- function() {
 	#read in data
 	print("read in data")
 	swed = read.table(locate("smalldata/glm_test/Motor_insurance_sweden.txt"),header = T)
@@ -13,7 +15,7 @@ test <- function(h) {
 	dd$Zone = as.factor(dd$Zone)
 	dd$Make = as.factor(dd$Make)
 	dd$Bonus = as.factor(dd$Bonus)
-	hd = as.h2o(dd,conn = h,destination_frame = "hd")
+	hd = as.h2o(dd,destination_frame = "hd")
 	#build models
 	print("build models")
 	hh = h2o.glm(x = 1:4,y = "Claims",training_frame = hd,family = "poisson",offset_column = "log_insured",lambda = 0)
@@ -28,7 +30,7 @@ test <- function(h) {
 	expect_less_than(hh@model$training_metrics@metrics$residual_deviance, no_off_hh@model$training_metrics@metrics$residual_deviance)
 	expect_less_than(hh@model$training_metrics@metrics$null_deviance, no_off_hh@model$training_metrics@metrics$null_deviance)
 	print("test ends")
-	testEnd()
+	
 }
 
 

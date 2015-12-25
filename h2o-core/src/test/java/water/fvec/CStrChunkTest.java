@@ -2,23 +2,26 @@ package water.fvec;
 
 import org.junit.*;
 
+import water.AutoBuffer;
 import water.TestUtil;
-import water.parser.ValueString;
+import water.parser.BufferedString;
+
 import java.util.Arrays;
 
 public class CStrChunkTest extends TestUtil {
+  @BeforeClass() public static void setup() { stall_till_cloudsize(1); }
   @Test
   public void test_inflate_impl() {
     for (int l=0; l<2; ++l) {
       NewChunk nc = new NewChunk(null, 0);
 
-      ValueString [] vals = new ValueString [1000001];
+      BufferedString[] vals = new BufferedString[1000001];
       for (int i = 0; i < vals.length; i++) {
-        vals[i] = new ValueString();
+        vals[i] = new BufferedString();
         vals[i].setTo("Foo"+i);
       }
       if (l==1) nc.addNA();
-      for (ValueString v : vals) nc.addStr(v);
+      for (BufferedString v : vals) nc.addStr(v);
       nc.addNA();
 
       Chunk cc = nc.compress();
@@ -26,29 +29,40 @@ public class CStrChunkTest extends TestUtil {
       Assert.assertTrue(cc instanceof CStrChunk);
       if (l==1) Assert.assertTrue(cc.isNA(0));
       if (l==1) Assert.assertTrue(cc.isNA_abs(0));
-      ValueString vs = new ValueString();
-      for (int i = 0; i < vals.length; ++i) Assert.assertEquals(vals[i], cc.atStr(vs, l + i));
-      for (int i = 0; i < vals.length; ++i) Assert.assertEquals(vals[i], cc.atStr_abs(vs, l + i));
+      BufferedString tmpStr = new BufferedString();
+      for (int i = 0; i < vals.length; ++i) Assert.assertEquals(vals[i], cc.atStr(tmpStr, l + i));
+      for (int i = 0; i < vals.length; ++i) Assert.assertEquals(vals[i], cc.atStr_abs(tmpStr, l + i));
       Assert.assertTrue(cc.isNA(vals.length + l));
       Assert.assertTrue(cc.isNA_abs(vals.length + l));
+
+      Chunk cc2 = new CStrChunk();
+      cc2.read(cc.write(new AutoBuffer()).flipForReading());
+      Assert.assertEquals(vals.length + 1 + l, cc2._len);
+      Assert.assertTrue(cc2 instanceof CStrChunk);
+      if (l==1) Assert.assertTrue(cc2.isNA(0));
+      if (l==1) Assert.assertTrue(cc2.isNA_abs(0));
+      for (int i = 0; i < vals.length; ++i) Assert.assertEquals(vals[i], cc2.atStr(tmpStr, l + i));
+      for (int i = 0; i < vals.length; ++i) Assert.assertEquals(vals[i], cc2.atStr_abs(tmpStr, l + i));
+      Assert.assertTrue(cc2.isNA(vals.length + l));
+      Assert.assertTrue(cc2.isNA_abs(vals.length + l));
 
       nc = cc.inflate_impl(new NewChunk(null, 0));
       Assert.assertEquals(vals.length + 1 + l, nc._len);
 
       if (l==1) Assert.assertTrue(nc.isNA(0));
       if (l==1) Assert.assertTrue(nc.isNA_abs(0));
-      for (int i = 0; i < vals.length; ++i) Assert.assertEquals(vals[i], nc.atStr(vs, l + i));
-      for (int i = 0; i < vals.length; ++i) Assert.assertEquals(vals[i], nc.atStr_abs(vs, l + i));
+      for (int i = 0; i < vals.length; ++i) Assert.assertEquals(vals[i], nc.atStr(tmpStr, l + i));
+      for (int i = 0; i < vals.length; ++i) Assert.assertEquals(vals[i], nc.atStr_abs(tmpStr, l + i));
       Assert.assertTrue(nc.isNA(vals.length + l));
       Assert.assertTrue(nc.isNA_abs(vals.length + l));
 
-      Chunk cc2 = nc.compress();
+      cc2 = nc.compress();
       Assert.assertEquals(vals.length + 1 + l, cc._len);
       Assert.assertTrue(cc2 instanceof CStrChunk);
       if (l==1) Assert.assertTrue(cc2.isNA(0));
       if (l==1) Assert.assertTrue(cc2.isNA_abs(0));
-      for (int i = 0; i < vals.length; ++i) Assert.assertEquals(vals[i], cc2.atStr(vs, l + i));
-      for (int i = 0; i < vals.length; ++i) Assert.assertEquals(vals[i], cc2.atStr_abs(vs, l + i));
+      for (int i = 0; i < vals.length; ++i) Assert.assertEquals(vals[i], cc2.atStr(tmpStr, l + i));
+      for (int i = 0; i < vals.length; ++i) Assert.assertEquals(vals[i], cc2.atStr_abs(tmpStr, l + i));
       Assert.assertTrue(cc2.isNA(vals.length + l));
       Assert.assertTrue(cc2.isNA_abs(vals.length + l));
 
@@ -74,7 +88,7 @@ public class CStrChunkTest extends TestUtil {
 
       //Append label vector and spot check
       frame.add("Labels", labels);
-      Assert.assertTrue("Failed to create a new String based label column", frame.lastVec().atStr(new ValueString(), 42).compareTo(new ValueString("Foo108"))==0);
+      Assert.assertTrue("Failed to create a new String based label column", frame.lastVec().atStr(new BufferedString(), 42).compareTo(new BufferedString("Foo108"))==0);
     } finally {
       if (frame != null) frame.delete();
     }

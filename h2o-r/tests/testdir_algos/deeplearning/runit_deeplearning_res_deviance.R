@@ -1,8 +1,10 @@
-####### This tests deviance for poisson, tweedie and gamma distributions in deeplearing by comparing with expected results ######
 setwd(normalizePath(dirname(R.utils::commandArgs(asValues=TRUE)$"f")))
-source('../../h2o-runit.R')
+source("../../../scripts/h2o-r-test-setup.R")
+####### This tests deviance for poisson, tweedie and gamma distributions in deeplearning by comparing with expected results ######
 
-test <- function(h) {
+
+
+test <- function() {
 	Hexpend =  read.csv(locate("smalldata/glm_test/HealthExpend.csv"))
 	MEPS=subset(Hexpend,EXPENDIP>0)
 	hdata = as.h2o(MEPS,destination_frame = "MEPS")
@@ -25,8 +27,8 @@ test <- function(h) {
         #print(hh@model$training_metrics@metrics$mean_residual_deviance)
         #print(hh@model$validation_metrics@metrics$mean_residual_deviance)
 
-	expect_equal(mean_deviance,hh@model$training_metrics@metrics$mean_residual_deviance, 1e-8)
-	expect_equal(mean_deviance,hh@model$validation_metrics@metrics$mean_residual_deviance, 1e-8)
+	expect_equal(mean_deviance, hh@model$training_metrics@metrics$mean_residual_deviance, tolerance=1e-8)
+	expect_equal(mean_deviance, hh@model$validation_metrics@metrics$mean_residual_deviance, tolerance=1e-8)
 	
 
 	print("tweedie")
@@ -40,29 +42,35 @@ test <- function(h) {
 	mean_deviance = (sum((MEPS$EXPENDIP^(2.0-dPower)/((1.0-dPower)*(2.0-dPower)) -
    		MEPS$EXPENDIP*exp(pr[,1]*(1.0-dPower))/(1.0-dPower) + exp(pr[,1]*(2.0-dPower))/(2.0-dPower) ))*2) /157  ## tweedie deviance
 
-        #print(mean_deviance)
-        #print(hh@model$training_metrics@metrics$mean_residual_deviance)
-        #print(hh@model$validation_metrics@metrics$mean_residual_deviance)
+  print("---------------------------------------------------------tweedie-----------------------------------------------")
+        print(mean_deviance)
+        print(hh@model$training_metrics@metrics$mean_residual_deviance)
+        print(hh@model$validation_metrics@metrics$mean_residual_deviance)
+  print("---------------------------------------------------------tweedie-----------------------------------------------")
+
 
 	expect_equal(mean_deviance,hh@model$training_metrics@metrics$mean_residual_deviance, 1e-8)
 	expect_equal(mean_deviance,hh@model$validation_metrics@metrics$mean_residual_deviance, 1e-8)
 	
 
 	print("poisson")
-	fre = h2o.uploadFile(locate("smalldata/glm_test/freMTPL2freq.csv.zip"),conn = h,destination_frame = "fre")
+	fre = h2o.uploadFile(locate("smalldata/glm_test/freMTPL2freq.csv.zip"),destination_frame = "fre")
 	fre$VehPower = as.factor(fre$VehPower)
 	hh = h2o.deeplearning(x = 4:12,y = "ClaimNb",training_frame = fre,hidden = c(5,5),epochs = 1,
                        train_samples_per_iteration = -1,validation_frame = fre,activation = "Tanh",distribution = "poisson", score_training_samples=0)
         p = h2o.predict(hh,newdata = fre)[,1]
-        mean_deviance = -2*sum(fre$ClaimNb*log(p) - p)/nrow(p) ## Poisson deviance
+        nr <- nrow(p)
+        mean_deviance = -2*sum(fre$ClaimNb*log(p) - p)/nr ## Poisson deviance
 
-        #print(mean_deviance)
-        #print(hh@model$training_metrics@metrics$mean_residual_deviance)
-        #print(hh@model$validation_metrics@metrics$mean_residual_deviance)
+  print("---------------------------------------------------------poisson-----------------------------------------------")
+        print(mean_deviance)
+        print(hh@model$training_metrics@metrics$mean_residual_deviance)
+        print(hh@model$validation_metrics@metrics$mean_residual_deviance)
+  print("---------------------------------------------------------poisson-----------------------------------------------")
 
-	expect_equal(mean_deviance,hh@model$training_metrics@metrics$mean_residual_deviance, 1e-8)
-	expect_equal(mean_deviance,hh@model$validation_metrics@metrics$mean_residual_deviance, 1e-8)
+	expect_equal(mean_deviance, hh@model$training_metrics@metrics$mean_residual_deviance, tolerance=1e-8)
+	expect_equal(mean_deviance, hh@model$validation_metrics@metrics$mean_residual_deviance, tolerance=1e-8)
 	
-	testEnd()
+	
 }
 doTest("DL residual deviance Test: DL deviance for poisson/gamma/tweedie distributions", test)

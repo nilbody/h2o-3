@@ -198,16 +198,6 @@ public class Weaver {
               "    return ab;\n" +
               "  }");
     if( debug_print ) System.out.println(debugJ);
-    String debugH= 
-      make_body(icer_cc, iced_cc, iced_clazz, "writeHTML", null, null,
-              "  protected final water.util.DocGen.HTML writeHTML"+id+"(water.util.DocGen.HTML ab, "+iced_name+" ice) {\n",
-              "    writeHTML"+super_id+"(ab,ice);\n",
-              "    ab.put%z(\"%s\",ice.%s);\n"  ,  "    ab.put%z(\"%s\",(%C)_unsafe.get%u(ice,%dL)); // %s\n",
-              "    ab.put%z(\"%s\",ice.%s);\n"  ,  "    ab.put%z(\"%s\",(%C)_unsafe.get%u(ice,%dL)); // %s\n",
-              "    ab.put%z(\"%s\",ice.%s);\n"  ,  "    ab.put%z(\"%s\",(%C)_unsafe.get%u(ice,%dL)); // %s\n"  ,
-              "    return ab;\n" +
-              "  }");
-    if( debug_print ) System.out.println(debugH);
 
     // The generic override method.  Called virtually at the start of a
     // serialization call.  Only calls thru to the named static method.
@@ -221,12 +211,6 @@ public class Weaver {
       "  }";
     if( debug_print ) System.out.println(wbodyJ);
     addMethod(wbodyJ,icer_cc);
-    String wbodyH= "  protected water.util.DocGen.HTML writeHTML(water.util.DocGen.HTML ab, water.Freezable ice) {\n"+
-      "    return writeHTML"+id+"(ab,("+iced_name+")ice);\n"+
-      "  }";
-    if( debug_print )
-      System.out.println(wbodyH);
-    addMethod(wbodyH,icer_cc);
 
 
     // The read call
@@ -272,6 +256,10 @@ public class Weaver {
     String ftbody = "  protected int frozenType() { return "+id+"; }";
     if( debug_print ) System.out.println(ftbody);
     addMethod(ftbody,icer_cc);
+
+    String cmp2 = "  protected void compute1( water.H2O.H2OCountedCompleter dt ) { dt.compute1(); }";
+    if( debug_print ) System.out.println(cmp2);
+    addMethod(cmp2,icer_cc);
 
     // DTasks need to be able to copy all their (non transient) fields from one
     // DTask instance over another, to match the MRTask API.

@@ -1,11 +1,5 @@
 package water.api;
 
-import water.H2O;
-import water.H2O.H2OCountedCompleter;
-import water.Iced;
-import water.util.Log;
-import water.util.ReflectionUtils;
-
 import java.io.IOException;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
@@ -13,6 +7,20 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.Properties;
+
+import water.DKV;
+import water.H2O;
+import water.H2O.H2OCountedCompleter;
+import water.Iced;
+import water.Key;
+import water.Keyed;
+import water.Value;
+import water.exceptions.H2OIllegalArgumentException;
+import water.exceptions.H2OKeyNotFoundArgumentException;
+import water.exceptions.H2OKeyWrongTypeArgumentException;
+import water.util.Log;
+import water.util.ReflectionUtils;
+import water.util.annotations.IgnoreJRERequirement;
 
 public class Handler extends H2OCountedCompleter {
   protected Handler( ) { super(); }
@@ -73,6 +81,7 @@ public class Handler extends H2OCountedCompleter {
     throw H2O.fail();
   }
 
+  @IgnoreJRERequirement
   protected StringBuffer markdown(Handler handler, int version, StringBuffer docs, String filename) {
     // TODO: version handling
     StringBuffer sb = new StringBuffer();
@@ -86,5 +95,23 @@ public class Handler extends H2OCountedCompleter {
     if (null != docs)
       docs.append(sb);
     return sb;
+  }
+
+  public static <T extends Keyed> T getFromDKV(String param_name, String key, Class<T> klazz) {
+    return getFromDKV(param_name, Key.make(key), klazz);
+  }
+  public static <T extends Keyed> T getFromDKV(String param_name, Key key, Class<T> klazz) {
+    if (null == key)
+      throw new H2OIllegalArgumentException(param_name, "Handler.getFromDKV()", key);
+
+    Value v = DKV.get(key);
+    if (null == v)
+      throw new H2OKeyNotFoundArgumentException(param_name, key.toString());
+
+    Iced ice = v.get();
+    if (! (klazz.isInstance(ice)))
+      throw new H2OKeyWrongTypeArgumentException(param_name, key.toString(), klazz, ice.getClass());
+
+    return (T) ice;
   }
 }

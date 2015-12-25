@@ -1,25 +1,27 @@
+setwd(normalizePath(dirname(R.utils::commandArgs(asValues=TRUE)$"f")))
+source("../../scripts/h2o-r-test-setup.R")
 #
 # test uploading functions
 #
 
 
-setwd(normalizePath(dirname(R.utils::commandArgs(asValues=TRUE)$"f")))
-source('../h2o-runit.R')
 
 
 
-functiontest <- function(conn){
+
+
+functiontest <- function(){
   Log.info('uploading function testing dataset')
-  df.h <- h2o.importFile(conn, locate('smalldata/jira/v-3.csv'))
+  df.h <- h2o.importFile(locate('smalldata/jira/v-3.csv'))
 
   Log.info('printing from h2o')
   Log.info( head(df.h) )
 
   Log.info('applying over 1, 2, 1:2')
   fn1 <- function(x){ sum(x) }
-  # h2o.addFunction(conn, fn1)
+  # h2o.addFunction(fn1)
   fn2 <- function(x){ x + 1 }
-  # h2o.addFunction(conn, fn2)
+  # h2o.addFunction(fn2)
 
   df.h.1 <- apply(df.h, 1, fn1)
   df.h.2 <- apply(df.h, 2, fn1)
@@ -37,7 +39,7 @@ functiontest <- function(conn){
   # expect_that(all( df.3[,1] == c(2,4,6) ))
   # expect_that(all( df.3[,2] == c(3,5,7) ))
 
-  testEnd()
+  
 }
 
 

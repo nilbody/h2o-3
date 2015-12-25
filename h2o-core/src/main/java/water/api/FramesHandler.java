@@ -8,6 +8,7 @@ import water.exceptions.*;
 import water.fvec.Frame;
 import water.fvec.Vec;
 import water.persist.PersistManager;
+import water.util.KeyedVoid;
 import water.util.Log;
 
 import java.io.InputStream;
@@ -24,7 +25,7 @@ import java.util.*;
  * <p> columnSummary(): Return the summary metrics for a column, e.g. mins, maxes, mean, sigma, percentiles, etc.
  * <p>
  * GET /3/Frames/(?<frameid>.*)/columns/(?<column>.*)/domain
- * <p> columnDomain(): Return the domains for the specified column. \"null\" if the column is not an Enum.
+ * <p> columnDomain(): Return the domains for the specified column. \"null\" if the column is not an categorical.
  * <p>
  * GET /3/Frames/(?<frameid>.*)/columns/(?<column>.*)
  * <p> column(): Return the specified column from a Frame.
@@ -68,12 +69,22 @@ class FramesHandler<I extends FramesHandler.Frames, S extends FramesBase<I, S>> 
     protected static Frame[] fetchAll() {
       // Get all the frames.
       final Key[] frameKeys = KeySnapshot.globalKeysOfClass(Frame.class);
-      Frame[] frames = new Frame[frameKeys.length];
+      List<Frame> frames = new ArrayList<Frame>(frameKeys.length);
       for (int i = 0; i < frameKeys.length; i++) {
         Frame frame = getFromDKV("(none)", frameKeys[i]);
-        frames[i] = frame;
+        // Weed out frames with vecs that are no longer in DKV
+        Vec[] vs = frame.vecs();
+        boolean skip = false;
+        for (int j=0; j < vs.length; j++) {
+          if (DKV.get(vs[j]._key) == null) {
+            Log.warn("Leaked frame: Frame "+frame._key+" points to one or more deleted vecs.");
+            skip = true;
+            break;
+          }
+        }
+        if (!skip) frames.add(frame);
       }
-      return frames;
+      return frames.toArray(new Frame[frames.size()]);
     }
 
     /**
@@ -203,13 +214,11 @@ class FramesHandler<I extends FramesHandler.Frames, S extends FramesBase<I, S>> 
       throw new H2OColumnNotFoundArgumentException("column", s.frame_id.toString(), s.column);
 
     // Compute second pass of rollups: the histograms.
-    if (!vec.isString()) {
-      vec.bins();
-    }
+    vec.bins();
 
     // Cons up our result
     s.frames = new FrameV3[1];
-    s.frames[0] = new FrameV3().fillFromImpl(new Frame(new String[]{s.column}, new Vec[]{vec}), s.row_offset, s.row_count, s.column_offset, s.column_count, true);
+    s.frames[0] = new FrameV3().fillFromImpl(new Frame(new String[]{s.column}, new Vec[]{vec}), s.row_offset, s.row_count, s.column_offset, s.column_count);
     return s;
   }
 
@@ -222,7 +231,7 @@ class FramesHandler<I extends FramesHandler.Frames, S extends FramesBase<I, S>> 
   /** Return a single frame. */
   @SuppressWarnings("unused") // called through reflection by RequestServer
   public FramesV3 fetch(int version, FramesV3 s) {
-    FramesV3 frames = doFetch(version, s, FrameV3.ColV3.NO_SUMMARY);
+    FramesV3 frames = doFetch(version, s);
 
     // Summary data is big, and not always there: null it out here.  You have to call columnSummary
     // to force computation of the summary data.
@@ -233,12 +242,12 @@ class FramesHandler<I extends FramesHandler.Frames, S extends FramesBase<I, S>> 
     return frames;
   }
 
-  private FramesV3 doFetch(int version, FramesV3 s, boolean force_summary) {
+  private FramesV3 doFetch(int version, FramesV3 s) {
     Frames f = s.createAndFillImpl();
 
     Frame frame = getFromDKV("key", s.frame_id.key()); // safe
     s.frames = new FrameV3[1];
-    s.frames[0] = new FrameV3(frame, s.row_offset, s.row_count).fillFromImpl(frame, s.row_offset, s.row_count, s.column_offset, s.column_count, force_summary);  // TODO: Refactor with FrameBase
+    s.frames[0] = new FrameV3(frame, s.row_offset, s.row_count).fillFromImpl(frame, s.row_offset, s.row_count, s.column_offset, s.column_count);  // TODO: Refactor with FrameBase
 
     if (s.find_compatible_models) {
       Model[] compatible = Frames.findCompatibleModels(frame, Models.fetchAll());
@@ -258,82 +267,118 @@ class FramesHandler<I extends FramesHandler.Frames, S extends FramesBase<I, S>> 
   public FramesV3 export(int version, FramesV3 s) {
     Frame fr = getFromDKV("key", s.frame_id.key());
     Log.info("ExportFiles processing (" + s.path + ")");
-    s.job =  (JobV3)Schema.schema(version, Job.class).fillFromImpl(ExportDataset.export(fr, s.path, s.frame_id.key().toString(),s.force));
+    s.job =  (JobV3) Schema.schema(version, Job.class).fillFromImpl(ExportDatasetJob.export(fr, s.path, s.frame_id.key().toString(),s.force));
     return s;
   }
 
-  private static class ExportDataset extends Job<Frame> {
 
-    private ExportDataset(Key dest) { super(dest,"Export"); }
+  // TODO: export a collection of columns as a single Frame.
+//  public FrameV3 exportCols(int version, FramesV3 s) {
+//    // have a collection of frames and column indices, cbind them, export, drop the ephemeral Frame
+//
+//  }
 
-    private static ExportDataset export(Frame fr, String path, String frameName, boolean force) {
-      InputStream is = (fr).toCSV(true,false);
-      ExportDataset job = new ExportDataset(null);
-      ExportTask t = new ExportTask(is,path,frameName,force,job);
+  private static class ExportDatasetJob extends Job<KeyedVoid> {
+
+    private ExportDatasetJob(String path) {
+      super(Key.<KeyedVoid>make(path), "Export frame");
+    }
+
+    private static ExportDatasetJob export(Frame fr, String path, String frameName, boolean overwrite) {
+      // Validate input
+      boolean fileExists = H2O.getPM().exists(path);
+      if (overwrite && fileExists) {
+        Log.warn("File " + path + " exists, but will be overwritten!");
+      } else if (!overwrite && fileExists) {
+        throw new H2OIllegalArgumentException(path, "exportFrame", "File " + path + " already exists!");
+      }
+      InputStream is = (fr).toCSV(true, false);
+      ExportDatasetJob job = new ExportDatasetJob(path);
+      ExportTask t = new ExportTask(is, path, frameName, overwrite, job);
       job.start(t, fr.anyVec().nChunks(), true);
       return job;
     }
 
     private static class ExportTask extends H2O.H2OCountedCompleter<ExportTask> {
+
       final InputStream _csv;
       final String _path;
       final String _frameName;
-      final boolean _force;
+      final boolean _overwrite;
       final Job _j;
-      ExportTask(InputStream csv, String path, String frameName, boolean force, Job j) {
-        _csv=csv; _path=path; _frameName=frameName; _force=force; _j=j;
+
+      ExportTask(InputStream csv, String path, String frameName, boolean overwrite, Job j) {
+        _csv = csv;
+        _path = path;
+        _frameName = frameName;
+        _overwrite = overwrite;
+        _j = j;
       }
 
-      private void copyStream(OutputStream os, final int buffer_size) {
-        int curIdx=0;
+      private long copyStream(OutputStream os, final int buffer_size) {
+        long len = 0;
+        int curIdx = 0;
         try {
-          byte[] bytes=new byte[buffer_size];
-          for(;;) {
-            int count=_csv.read(bytes, 0, buffer_size);
-            if( count<=0 ) break;
+          byte[] bytes = new byte[buffer_size];
+          for (; ; ) {
+            int count = _csv.read(bytes, 0, buffer_size);
+            if (count <= 0) {
+              break;
+            }
+            len += count;
             os.write(bytes, 0, count);
-            int workDone=((Frame.CSVStream)_csv)._curChkIdx;
-            if( curIdx!=workDone) {
-              _j.update(workDone-curIdx);
+            int workDone = ((Frame.CSVStream) _csv)._curChkIdx;
+            if (curIdx != workDone) {
+              _j.update(workDone - curIdx);
               curIdx = workDone;
             }
           }
-        }
-        catch(Exception ex) {
+        } catch (Exception ex) {
           throw new RuntimeException(ex);
         }
+        return len;
       }
 
-      @Override public void compute2() {
+      @Override
+      public void compute2() {
         PersistManager pm = H2O.getPM();
         OutputStream os = null;
+        long written = -1;
         try {
-          os = pm.create(_path, _force);
-          copyStream(os, 4 * 1024 * 1024);
+          os = pm.create(_path, _overwrite);
+          written = copyStream(os, 4 * 1024 * 1024);
         } finally {
           if (os != null) {
             try {
+              os.flush(); // Seems redundant, but seeing a short-file-read on windows sometimes
               os.close();
-              Log.info("Key '" + _frameName +  "' was written to " + _path + ".");
-            }
-            catch (Exception e) {
+              Log.info("Key '" + _frameName + "' of "+written+" bytes was written to " + _path + ".");
+            } catch (Exception e) {
               Log.err(e);
             }
           }
         }
         tryComplete();
       }
+
       // Took a crash/NPE somewhere in the parser.  Attempt cleanup.
-      @Override public boolean onExceptionalCompletion(Throwable ex, CountedCompleter caller){
-        if( _j != null ) {
+      @Override
+      public boolean onExceptionalCompletion(Throwable ex, CountedCompleter caller) {
+        if (_j != null) {
           _j.cancel();
-          if (ex instanceof H2OParseException) throw (H2OParseException) ex;
-          else _j.failed(ex);
+          if (ex instanceof H2OParseException) {
+            throw (H2OParseException) ex;
+          } else {
+            _j.failed(ex);
+          }
         }
         return true;
       }
 
-      @Override public void onCompletion(CountedCompleter caller) { _j.done(); }
+      @Override
+      public void onCompletion(CountedCompleter caller) {
+        _j.done();
+      }
     }
   }
 
@@ -342,18 +387,14 @@ class FramesHandler<I extends FramesHandler.Frames, S extends FramesBase<I, S>> 
   public FramesV3 summary(int version, FramesV3 s) {
     Frame frame = getFromDKV("key", s.frame_id.key()); // safe
 
-    if (null != frame) {
+    if( null != frame) {
       Futures fs = new Futures();
-      Vec[] vecArr = frame.vecs();
-      for (Vec v : vecArr) {
-        if (! v.isString()) {
-          v.startRollupStats(fs, Vec.DO_HISTOGRAMS);
-        }
-      }
+      for( Vec v : frame.vecs() )
+        v.startRollupStats(fs, Vec.DO_HISTOGRAMS);
       fs.blockForPending();
     }
 
-    return doFetch(version, s, FrameV3.ColV3.FORCE_SUMMARY);
+    return doFetch(version, s);
   }
 
   /** Remove an unlocked frame.  Fails if frame is in-use. */

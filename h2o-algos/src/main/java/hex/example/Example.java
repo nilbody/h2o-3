@@ -25,14 +25,14 @@ public class Example extends ModelBuilder<ExampleModel,ExampleParameters,Example
     };
   }
 
-  @Override public BuilderVisibility builderVisibility() { return BuilderVisibility.Experimental; };
+  @Override public BuilderVisibility builderVisibility() { return BuilderVisibility.Experimental; }
 
   // Called from Nano thread; start the Example Job on a F/J thread
   public Example( ExampleModel.ExampleParameters parms ) { super("Example",parms); init(false); }
 
   public ModelBuilderSchema schema() { return new ExampleV3(); }
 
-  @Override public Example trainModelImpl(long work, boolean restartTimer) {
+  @Override protected Example trainModelImpl(long work, boolean restartTimer) {
     return (Example)start(new ExampleDriver(), work, restartTimer);
   }
 
@@ -57,6 +57,7 @@ public class Example extends ModelBuilder<ExampleModel,ExampleParameters,Example
   // ----------------------
   private class ExampleDriver extends H2OCountedCompleter<ExampleDriver> {
 
+    protected ExampleDriver() { super(true); } // bump priority of drivers
     @Override protected void compute2() {
       ExampleModel model = null;
       try {

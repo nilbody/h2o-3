@@ -1,8 +1,10 @@
-### This tests offsets in glm ######
 setwd(normalizePath(dirname(R.utils::commandArgs(asValues=TRUE)$"f")))
-source('../../h2o-runit.R')
+source("../../../scripts/h2o-r-test-setup.R")
+### This tests offsets in glm ######
 
-test <- function(h) {
+
+
+test <- function() {
 
 	#create  data
 	print("create synthetic data")
@@ -12,12 +14,12 @@ test <- function(h) {
 	y=rbinom(N, 1,.4)
 	off = rnorm(N,0,5)
 	rfm = data.frame(y,x,off)
-	frm =as.h2o(rfm,h,destination_frame = "frm")
+	frm =as.h2o(rfm,destination_frame = "frm")
 	set.seed(22)
 	off = rnorm(N,-1,1)
 	summary(off)
 	valid = data.frame(y,x,off)
-	val = as.h2o(valid,h,destination_frame = "val")
+	val = as.h2o(valid,destination_frame = "val")
 
 	#build model with lambda = 0
 	print("build models with offset in h2o and R with lambda=0")
@@ -53,7 +55,7 @@ test <- function(h) {
 	expect_equal(max(pr),max(ph$p1),tolerance = 0.0001)
 	expect_equal(mean(pr),mean(ph$p1),tolerance = 0.0001)
 
-	testEnd()
+	
 }
 
 

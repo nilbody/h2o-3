@@ -1,62 +1,129 @@
 """
 This module implements the base model class.  All model things inherit from this class.
 """
+from __future__ import print_function
+from builtins import zip
+from builtins import str
+from builtins import range
+from builtins import object
 
 import h2o
-from . import H2OFrame
-from . import H2OConnection
+import imp, traceback
+from ..utils.shared_utils import can_use_pandas
 
 
 class ModelBase(object):
-  def __init__(self, dest_key, model_json, metrics_class):
-    self._id = dest_key
 
-    # setup training metrics
-    if "training_metrics" in model_json["output"]:
-      tm = model_json["output"]["training_metrics"]
-      tm = metrics_class(tm,True,False,False,model_json["algo"])
-      model_json["output"]["training_metrics"] = tm
+  def __init__(self):
+    self._id = None
+    self._model_json = None
+    self._metrics_class = None
+    self._is_xvalidated = False
+    self._xval_keys = None
+    self._parms = {}   # internal, for object recycle
+    self.parms = {}    # external
+    self._estimator_type = "unsupervised"
+    self._future = False  # used by __repr__/show to query job state
+    self._job = None      # used when _future is True
 
-    # setup validation metrics
-    if "validation_metrics" in model_json["output"]:
-      vm = model_json["output"]["validation_metrics"]
-      if vm is None:
-        model_json["output"]["validation_metrics"] = None
-      else:
-        vm = metrics_class(vm,False,True,False,model_json["algo"])
-        model_json["output"]["validation_metrics"] = vm
-    else:
-      model_json["output"]["validation_metrics"] = None
+  @property
+  def model_id(self):
+    """
+    :return: Retrieve this model's identifier.
+    """
+    return self._id
 
-    # setup cross validation metrics
-    if "cross_validation_metrics" in model_json["output"]:
-      cvm = model_json["output"]["cross_validation_metrics"]
-      if cvm is None:
-        model_json["output"]["cross_validation_metrics"] = None
-      else:
-        cvm = metrics_class(cvm,False,False,True,model_json["algo"])
-        model_json["output"]["cross_validation_metrics"] = cvm
-    else:
-      model_json["output"]["cross_validation_metrics"] = None
+  @model_id.setter
+  def model_id(self, value):
+    oldname = self.model_id
+    self._id = value
+    h2o.rapids("(rename \"{}\" \"{}\")".format(oldname, value))
 
-    self._model_json = model_json
-    self._metrics_class = metrics_class
+  @property
+  def params(self):
+    """
+    Get the parameters and the actual/default values only.
+
+    :return: A dictionary of parameters used to build this model.
+    """
+    params = {}
+    for p in self.parms:
+      params[p] = {"default":self.parms[p]["default_value"], "actual":self.parms[p]["actual_value"]}
+    return params
+
+  @property
+  def full_parameters(self):
+    """
+    Get the full specification of all parameters.
+
+    :return: a dictionary of parameters used to build this model.
+    """
+    return self.parms
+
+  @property
+  def type(self):
+    """Get the type of model built as a string.
+
+    Returns
+    -------
+      "classifier" or "regressor" or "unsupervised"
+    """
+    return self._estimator_type
 
   def __repr__(self):
-    self.show()
+    # PUBDEV-2278: using <method>? from IPython caused everything to dump
+    stk = traceback.extract_stack()
+    if not ("IPython" in stk[-2][0] and "info" == stk[-2][2]):
+      self.show()
     return ""
 
   def predict(self, test_data):
     """
     Predict on a dataset.
-
-    :param test_data: Data to be predicted on.
-    :return: A new H2OFrame filled with predictions.
+    
+    Parameters
+    ----------    
+    test_data: H2OFrame
+      Data on which to make predictions.
+    
+    Returns
+    -------
+      A new H2OFrame of predictions.
     """
-    if not test_data: raise ValueError("Must specify test data")
-    j = H2OConnection.post_json("Predictions/models/" + self._id + "/frames/" + test_data._id)
-    prediction_frame_id = j["model_metrics"][0]["predictions"]["frame_id"]["name"]
-    return h2o.get_frame(prediction_frame_id)
+    if not isinstance(test_data, h2o.H2OFrame): raise ValueError("test_data must be an instance of H2OFrame")
+    j = h2o.H2OConnection.post_json("Predictions/models/" + self.model_id + "/frames/" + test_data.frame_id)
+    # prediction_frame_id = j["predictions_frame"] #j["model_metrics"][0]["predictions"]["frame_id"]["name"]
+    return h2o.get_frame(j["predictions_frame"]["name"])
+
+  def is_cross_validated(self):
+    """
+    :return:  True if the model was cross-validated.
+    """
+    return self._is_xvalidated
+
+  def xval_keys(self):
+    """
+    :return: The model keys for the cross-validated model.
+    """
+    return self._xval_keys
+
+  def get_xval_models(self,key=None):
+    """
+    Return a Model object.
+
+    :param key: If None, return all cross-validated models; otherwise return the model that key points to.
+    :return: A model or list of models.
+    """
+    return h2o.get_model(key) if key is not None else [h2o.get_model(k) for k in self._xval_keys]
+
+  @property
+  def xvals(self):
+    """
+    Return a list of the cross-validated models.
+
+    :return: A list of models
+    """
+    return self.get_xval_models()
 
   def deepfeatures(self, test_data, layer):
     """
@@ -66,7 +133,7 @@ class ModelBase(object):
     :param layer: 0 index hidden layer
     """
     if test_data is None: raise ValueError("Must specify test data")
-    j = H2OConnection.post_json("Predictions/models/" + self._id + "/frames/" + test_data._id, deep_features_hidden_layer=layer)
+    j = h2o.H2OConnection.post_json("Predictions/models/" + self._id + "/frames/" + test_data.frame_id, deep_features_hidden_layer=layer)
     return h2o.get_frame(j["predictions_frame"]["name"])
 
   def weights(self, matrix_id=0):
@@ -76,7 +143,7 @@ class ModelBase(object):
     :return: an H2OFrame which represents the weight matrix identified by matrix_id
     """
     num_weight_matrices = len(self._model_json['output']['weights'])
-    if matrix_id not in range(num_weight_matrices):
+    if matrix_id not in list(range(num_weight_matrices)):
       raise ValueError("Weight matrix does not exist. Model has {0} weight matrices (0-based indexing), but matrix {1} "
                        "was requested.".format(num_weight_matrices, matrix_id))
     return h2o.get_frame(self._model_json['output']['weights'][matrix_id]['URL'].split('/')[3])
@@ -88,39 +155,72 @@ class ModelBase(object):
     :return: an H2OFrame which represents the bias vector identified by vector_id
     """
     num_bias_vectors = len(self._model_json['output']['biases'])
-    if vector_id not in range(num_bias_vectors):
+    if vector_id not in list(range(num_bias_vectors)):
       raise ValueError("Bias vector does not exist. Model has {0} bias vectors (0-based indexing), but vector {1} "
                        "was requested.".format(num_bias_vectors, vector_id))
     return h2o.get_frame(self._model_json['output']['biases'][vector_id]['URL'].split('/')[3])
 
+  def normmul(self):
+    """
+    Normalization/Standardization multipliers for numeric predictors
+    """
+    return self._model_json['output']['normmul']
+
+  def normsub(self):
+    """
+    Normalization/Standardization offsets for numeric predictors
+    """
+    return self._model_json['output']['normsub']
+
+  def respmul(self):
+    """
+    Normalization/Standardization multipliers for numeric response
+    """
+    return self._model_json['output']['normrespmul']
+
+  def respsub(self):
+    """
+    Normalization/Standardization offsets for numeric response
+    """
+    return self._model_json['output']['normrespsub']
+
+  def catoffsets(self):
+    """
+    Categorical offsets for one-hot encoding
+    """
+    return self._model_json['output']['catoffsets']
+
   def model_performance(self, test_data=None, train=False, valid=False):
     """
     Generate model metrics for this model on test_data.
-
-    :param test_data: Data set for which model metrics shall be computed against. Both train and valid arguments are ignored if test_data is not None.
-    :param train: Report the training metrics for the model. If the test_data is the training data, the training metrics are returned.
-    :param valid: Report the validation metrics for the model. If train and valid are True, then it defaults to True.
-    :return: An object of class H2OModelMetrics.
+    
+    Parameters
+    ----------   
+    test_data: H2OFrame, optional 
+      Data set for which model metrics shall be computed against. Both train and valid arguments are ignored if test_data is not None.
+    train: boolean, optional
+      Report the training metrics for the model. If the test_data is the training data, the training metrics are returned.
+    valid: boolean, optional 
+      Report the validation metrics for the model. If train and valid are True, then it defaults to True.
+    
+    Returns
+    -------
+      An object of class H2OModelMetrics.
     """
     if test_data is None:
-      if not train and not valid:
-        train = True  # default to train
-
-      if train:
-        return self._model_json["output"]["training_metrics"]
-
-      if valid:
-        return self._model_json["output"]["validation_metrics"]
+      if not train and not valid: train = True  # default to train
+      if train: return self._model_json["output"]["training_metrics"]
+      if valid: return self._model_json["output"]["validation_metrics"]
 
     else:  # cases dealing with test_data not None
-      if not isinstance(test_data, H2OFrame):
+      if not isinstance(test_data, h2o.H2OFrame):
         raise ValueError("`test_data` must be of type H2OFrame.  Got: " + type(test_data))
-      res = H2OConnection.post_json("ModelMetrics/models/" + self._id + "/frames/" + test_data._id)
+      res = h2o.H2OConnection.post_json("ModelMetrics/models/" + self.model_id + "/frames/" + test_data.frame_id)
 
       # FIXME need to do the client-side filtering...  PUBDEV-874:   https://0xdata.atlassian.net/browse/PUBDEV-874
       raw_metrics = None
       for mm in res["model_metrics"]:
-        if mm["frame"]["name"] == test_data._id:
+        if not mm["frame"] == None and mm["frame"]["name"] == test_data.frame_id:
           raw_metrics = mm
           break
       return self._metrics_class(raw_metrics,algo=self._model_json["algo"])
@@ -128,40 +228,53 @@ class ModelBase(object):
   def score_history(self):
     """
     Retrieve Model Score History
-    :return: the score history (H2OTwoDimTable)
+    
+    Returns
+    -------
+      The score history as an H2OTwoDimTable.
     """
     model = self._model_json["output"]
-    if 'scoring_history' in model.keys() and model["scoring_history"] != None: return model["scoring_history"]
-    else: print "No score history for this model"
-
+    if 'scoring_history' in list(model.keys()) and model["scoring_history"] != None:
+      s = model["scoring_history"]
+      if can_use_pandas():
+        import pandas
+        pandas.options.display.max_rows = 20
+        return pandas.DataFrame(s.cell_values,columns=s.col_header)
+      return s
+    else: print("No score history for this model")
 
   def summary(self):
     """
     Print a detailed summary of the model.
-
-    :return:
     """
     model = self._model_json["output"]
     if model["model_summary"]:
       model["model_summary"].show()  # H2OTwoDimTable object
 
-
   def show(self):
     """
     Print innards of model, without regards to type
 
-    :return: None
     """
+    if self._future:
+      self._job.poll_once()
+      return
+    if self._model_json is None:
+      print("No model trained yet")
+      return
+    if self.model_id is None:
+      print("This H2OEstimator has been removed.")
+      return
     model = self._model_json["output"]
-    print "Model Details"
-    print "============="
+    print("Model Details")
+    print("=============")
 
-    print self.__class__.__name__, ": ", self._model_json["algo_full_name"]
-    print "Model Key: ", self._id
+    print(self.__class__.__name__, ": ", self._model_json["algo_full_name"])
+    print("Model Key: ", self._id)
 
     self.summary()
 
-    print
+    print()
     # training metrics
     tm = model["training_metrics"]
     if tm: tm.show()
@@ -170,22 +283,33 @@ class ModelBase(object):
     xm = model["cross_validation_metrics"]
     if xm: xm.show()
 
-    if "scoring_history" in model.keys() and model["scoring_history"]: model["scoring_history"].show()
-    if "variable_importances" in model.keys() and model["variable_importances"]: model["variable_importances"].show()
+    if "scoring_history" in list(model.keys()) and model["scoring_history"]: model["scoring_history"].show()
+    if "variable_importances" in list(model.keys()) and model["variable_importances"]: model["variable_importances"].show()
 
-  def varimp(self, return_list=False):
+  def varimp(self, use_pandas=False):
     """
     Pretty print the variable importances, or return them in a list
-    :param return_list: if True, then return the variable importances in an list (ordered from most important to least
-    important). Each entry in the list is a 4-tuple of (variable, relative_importance, scaled_importance, percentage).
-    :return: None or ordered list
+
+    Parameters
+    ----------
+    use_pandas: boolean, optional
+      If True, then the variable importances will be returned as a pandas data frame.
+    
+    Returns
+    -------
+      A list or Pandas DataFrame.
     """
     model = self._model_json["output"]
-    if "variable_importances" in model.keys() and model["variable_importances"]:
-      if not return_list: return model["variable_importances"].show()
-      else: return model["variable_importances"].cell_values
+    if "variable_importances" in list(model.keys()) and model["variable_importances"]:
+      vals = model["variable_importances"].cell_values
+      header=model["variable_importances"].col_header
+      if use_pandas and can_use_pandas():
+        import pandas
+        return pandas.DataFrame(vals, columns=header)
+      else:
+        return vals
     else:
-      print "Warning: This model doesn't have variable importances"
+      print("Warning: This model doesn't have variable importances")
 
   def residual_deviance(self,train=False,valid=False,xval=False):
     """
@@ -196,15 +320,9 @@ class ModelBase(object):
     :return: Return the residual deviance, or None if it is not present.
     """
     if xval: raise ValueError("Cross-validation metrics are not available.")
-    if not train and not valid:
-      train = True
-    if train and valid:
-      train = True
-
-    if train:
-      return self._model_json["output"]["training_metrics"].residual_deviance()
-    else:
-      return self._model_json["output"]["validation_metrics"].residual_deviance()
+    if not train and not valid: train = True
+    if train and valid:  train = True
+    return self._model_json["output"]["training_metrics"].residual_deviance() if train else self._model_json["output"]["validation_metrics"].residual_deviance()
 
   def residual_degrees_of_freedom(self,train=False,valid=False,xval=False):
     """
@@ -215,15 +333,9 @@ class ModelBase(object):
     :return: Return the residual dof, or None if it is not present.
     """
     if xval: raise ValueError("Cross-validation metrics are not available.")
-    if not train and not valid:
-      train = True
-    if train and valid:
-      train = True
-
-    if train:
-      return self._model_json["output"]["training_metrics"].residual_degrees_of_freedom()
-    else:
-      return self._model_json["output"]["validation_metrics"].residual_degrees_of_freedom()
+    if not train and not valid: train = True
+    if train and valid:         train = True
+    return self._model_json["output"]["training_metrics"].residual_degrees_of_freedom() if train else self._model_json["output"]["validation_metrics"].residual_degrees_of_freedom()
 
   def null_deviance(self,train=False,valid=False,xval=False):
     """
@@ -234,15 +346,9 @@ class ModelBase(object):
     :return: Return the null deviance, or None if it is not present.
     """
     if xval: raise ValueError("Cross-validation metrics are not available.")
-    if not train and not valid:
-      train = True
-    if train and valid:
-      train = True
-
-    if train:
-      return self._model_json["output"]["training_metrics"].null_deviance()
-    else:
-      return self._model_json["output"]["validation_metrics"].null_deviance()
+    if not train and not valid: train = True
+    if train and valid:         train = True
+    return self._model_json["output"]["training_metrics"].null_deviance() if train else self._model_json["output"]["validation_metrics"].null_deviance()
 
   def null_degrees_of_freedom(self,train=False,valid=False,xval=False):
     """
@@ -253,22 +359,15 @@ class ModelBase(object):
     :return: Return the null dof, or None if it is not present.
     """
     if xval: raise ValueError("Cross-validation metrics are not available.")
-    if not train and not valid:
-      train = True
-    if train and valid:
-      train = True
-
-    if train:
-      return self._model_json["output"]["training_metrics"].null_degrees_of_freedom()
-    else:
-      return self._model_json["output"]["validation_metrics"].null_degrees_of_freedom()
+    if not train and not valid: train = True
+    if train and valid:         train = True
+    return self._model_json["output"]["training_metrics"].null_degrees_of_freedom() if train else self._model_json["output"]["validation_metrics"].null_degrees_of_freedom()
 
   def pprint_coef(self):
     """
     Pretty print the coefficents table (includes normalized coefficients)
-    :return: None
     """
-    print self._model_json["output"]["coefficients_table"]  # will return None if no coefs!
+    print(self._model_json["output"]["coefficients_table"])  # will return None if no coefs!
 
   def coef(self):
     """
@@ -306,8 +405,8 @@ class ModelBase(object):
     """
     tm = ModelBase._get_metrics(self, train, valid, xval)
     m = {}
-    for k,v in zip(tm.keys(),tm.values()): m[k] = None if v is None else v.r2()
-    return m.values()[0] if len(m) == 1 else m
+    for k,v in zip(list(tm.keys()),list(tm.values())): m[k] = None if v is None else v.r2()
+    return list(m.values())[0] if len(m) == 1 else m
 
   def mse(self, train=False, valid=False, xval=False):
     """
@@ -316,15 +415,23 @@ class ModelBase(object):
     If more than one options is set to True, then return a dictionary of metrics where the keys are "train", "valid",
     and "xval"
 
-    :param train: If train is True, then return the MSE value for the training data.
-    :param valid: If valid is True, then return the MSE value for the validation data.
-    :param xval:  If xval is True, then return the MSE value for the cross validation data.
-    :return: The MSE for this regression model.
+    Parameters
+    ----------
+    train : bool, default=True
+      If train is True, then return the MSE value for the training data.
+    valid : bool, default=True
+      If valid is True, then return the MSE value for the validation data.
+    xval : bool, default=True
+      If xval is True, then return the MSE value for the cross validation data.
+
+    Returns
+    -------
+      The MSE for this regression model.
     """
     tm = ModelBase._get_metrics(self, train, valid, xval)
     m = {}
-    for k,v in zip(tm.keys(),tm.values()): m[k] = None if v is None else v.mse()
-    return m.values()[0] if len(m) == 1 else m
+    for k,v in zip(list(tm.keys()),list(tm.values())): m[k] = None if v is None else v.mse()
+    return list(m.values())[0] if len(m) == 1 else m
 
   def logloss(self, train=False, valid=False, xval=False):
     """
@@ -340,8 +447,8 @@ class ModelBase(object):
     """
     tm = ModelBase._get_metrics(self, train, valid, xval)
     m = {}
-    for k,v in zip(tm.keys(),tm.values()): m[k] = None if v is None else v.logloss()
-    return m.values()[0] if len(m) == 1 else m
+    for k,v in zip(list(tm.keys()),list(tm.values())): m[k] = None if v is None else v.logloss()
+    return list(m.values())[0] if len(m) == 1 else m
 
   def mean_residual_deviance(self, train=False, valid=False, xval=False):
     """
@@ -357,8 +464,8 @@ class ModelBase(object):
     """
     tm = ModelBase._get_metrics(self, train, valid, xval)
     m = {}
-    for k,v in zip(tm.keys(),tm.values()): m[k] = None if v is None else v.mean_residual_deviance()
-    return m.values()[0] if len(m) == 1 else m
+    for k,v in zip(list(tm.keys()),list(tm.values())): m[k] = None if v is None else v.mean_residual_deviance()
+    return list(m.values())[0] if len(m) == 1 else m
 
   def auc(self, train=False, valid=False, xval=False):
     """
@@ -374,8 +481,8 @@ class ModelBase(object):
     """
     tm = ModelBase._get_metrics(self, train, valid, xval)
     m = {}
-    for k,v in zip(tm.keys(),tm.values()): m[k] = None if v is None else v.auc()
-    return m.values()[0] if len(m) == 1 else m
+    for k,v in zip(list(tm.keys()),list(tm.values())): m[k] = None if v is None else v.auc()
+    return list(m.values())[0] if len(m) == 1 else m
 
   def aic(self, train=False, valid=False, xval=False):
     """
@@ -391,8 +498,8 @@ class ModelBase(object):
     """
     tm = ModelBase._get_metrics(self, train, valid, xval)
     m = {}
-    for k,v in zip(tm.keys(),tm.values()): m[k] = None if v is None else v.aic()
-    return m.values()[0] if len(m) == 1 else m
+    for k,v in zip(list(tm.keys()),list(tm.values())): m[k] = None if v is None else v.aic()
+    return list(m.values())[0] if len(m) == 1 else m
 
   def giniCoef(self, train=False, valid=False, xval=False):
     """
@@ -408,8 +515,8 @@ class ModelBase(object):
     """
     tm = ModelBase._get_metrics(self, train, valid, xval)
     m = {}
-    for k,v in zip(tm.keys(),tm.values()): m[k] = None if v is None else v.giniCoef()
-    return m.values()[0] if len(m) == 1 else m
+    for k,v in zip(list(tm.keys()),list(tm.values())): m[k] = None if v is None else v.giniCoef()
+    return list(m.values())[0] if len(m) == 1 else m
 
   def download_pojo(self,path=""):
     """
@@ -434,6 +541,88 @@ class ModelBase(object):
   # def __del__(self):
   #   h2o.remove(self._id)
 
+  def _plot(self, timestep, metric, **kwargs):
+
+    # check for matplotlib. exit if absent
+    try:
+      imp.find_module('matplotlib')
+      import matplotlib
+      if 'server' in list(kwargs.keys()) and kwargs['server']: matplotlib.use('Agg', warn=False)
+      import matplotlib.pyplot as plt
+    except ImportError:
+      print("matplotlib is required for this function!")
+      return
+
+    scoring_history = self.score_history()
+    # Separate functionality for GLM since its output is different from other algos
+    if self._model_json["algo"] == "glm":
+      # GLM has only one timestep option, which is `iteration`
+      timestep = "iteration"
+      if metric == "AUTO": metric = "log_likelihood"
+      elif metric not in ("log_likelihood", "objective"):
+        raise ValueError("for GLM, metric must be one of: log_likelihood, objective")
+      plt.xlabel(timestep)
+      plt.ylabel(metric)
+      plt.title("Validation Scoring History")
+      plt.plot(scoring_history[timestep], scoring_history[metric])
+
+    elif self._model_json["algo"] in ("deeplearning", "drf", "gbm"):
+      # Set timestep
+      if self._model_json["algo"] in ("gbm", "drf"):
+        if timestep == "AUTO": timestep = "number_of_trees"
+        elif timestep not in ("duration","number_of_trees"):
+          raise ValueError("timestep for gbm or drf must be one of: duration, number_of_trees")
+      else:  #self._model_json["algo"] == "deeplearning":
+        # Delete first row of DL scoring history since it contains NAs & NaNs
+        if scoring_history["samples"][0] == 0:
+          scoring_history = scoring_history[1:]
+        if timestep == "AUTO": timestep = "epochs"
+        elif timestep not in ("epochs","samples","duration"):
+          raise ValueError("timestep for deeplearning must be one of: epochs, samples, duration")
+
+      training_metric = "training_{}".format(metric)
+      validation_metric = "validation_{}".format(metric)
+      if timestep == "duration":
+        dur_colname = "duration_{}".format(scoring_history["duration"][1].split()[1])
+        scoring_history[dur_colname] = [str(x).split()[0] for x in scoring_history["duration"]]
+        timestep = dur_colname
+
+      if can_use_pandas():
+        valid = validation_metric in list(scoring_history)
+        ylim = (scoring_history[[training_metric, validation_metric]].min().min(), scoring_history[[training_metric, validation_metric]].max().max()) if valid \
+          else (scoring_history[training_metric].min(), scoring_history[training_metric].max())
+      else:
+        valid = validation_metric in scoring_history.col_header
+        ylim = (min(min(scoring_history[[training_metric, validation_metric]])), max(max(scoring_history[[training_metric, validation_metric]]))) if valid \
+          else (min(scoring_history[training_metric]), max(scoring_history[training_metric]))
+      if ylim[0] == ylim[1]: ylim = (0,1)
+
+      if valid:  # Training and validation scoring history
+        plt.xlabel(timestep)
+        plt.ylabel(metric)
+        plt.title("Scoring History")
+        plt.ylim(ylim)
+        plt.plot(scoring_history[timestep], scoring_history[training_metric], label="Training")
+        plt.plot(scoring_history[timestep], scoring_history[validation_metric], color="orange", label="Validation")
+        plt.legend()
+      else:  # Training scoring history only
+        plt.xlabel(timestep)
+        plt.ylabel(training_metric)
+        plt.title("Training Scoring History")
+        plt.ylim(ylim)
+        plt.plot(scoring_history[timestep], scoring_history[training_metric])
+
+    else: # algo is not glm, deeplearning, drf, gbm
+      raise ValueError("Plotting not implemented for this type of model")
+    if "server" not in list(kwargs.keys()) or not kwargs["server"]: plt.show()
+
   @staticmethod
-  def _has(dictionary, key):
-    return key in dictionary and dictionary[key] is not None
+  def _check_targets(y_actual, y_predicted):
+    """Check that y_actual and y_predicted have the same length.
+
+    :param y_actual: An H2OFrame
+    :param y_predicted: An H2OFrame
+    :return: None
+    """
+    if len(y_actual) != len(y_predicted):
+      raise ValueError("Row mismatch: [{},{}]".format(len(y_actual),len(y_predicted)))

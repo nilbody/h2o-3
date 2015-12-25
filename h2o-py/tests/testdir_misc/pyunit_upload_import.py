@@ -1,20 +1,24 @@
 import sys
-sys.path.insert(1, "../../")
+sys.path.insert(1,"../../")
 import h2o
+from tests import pyunit_utils
 
-def upload_import_small(ip, port):
+
+
+
+def upload_import_small():
     # Connect to a pre-existing cluster
-    h2o.init(ip, port)
+    
 
     various_datasets = ["smalldata/iris/iris.csv", "smalldata/iris/iris_wheader.csv", "smalldata/prostate/prostate.csv",
                         "smalldata/prostate/prostate_woheader.csv.gz"]
 
     for dataset in various_datasets:
-        uploaded_frame = h2o.upload_file(h2o.locate(dataset))
-        imported_frame = h2o.import_frame(h2o.locate(dataset))
+        uploaded_frame = h2o.upload_file(pyunit_utils.locate(dataset))
+        imported_frame = h2o.import_file(pyunit_utils.locate(dataset))
 
-        rows_u, cols_u = uploaded_frame.dim()
-        rows_i, cols_i = imported_frame.dim()
+        rows_u, cols_u = uploaded_frame.dim
+        rows_i, cols_i = imported_frame.dim
 
         assert rows_u == rows_i, "Expected same number of rows regardless of method. upload: {0}, import: " \
                                  "{1}.".format(rows_u, rows_i)
@@ -22,5 +26,9 @@ def upload_import_small(ip, port):
         assert cols_u == cols_i, "Expected same number of cols regardless of method. upload: {0}, import: " \
                                  "{1}.".format(cols_u, cols_i)
 
+
+
 if __name__ == "__main__":
-    h2o.run_test(sys.argv, upload_import_small)
+    pyunit_utils.standalone_test(upload_import_small)
+else:
+    upload_import_small()

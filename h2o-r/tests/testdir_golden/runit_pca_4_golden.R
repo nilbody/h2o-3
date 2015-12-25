@@ -1,10 +1,12 @@
 setwd(normalizePath(dirname(R.utils::commandArgs(asValues=TRUE)$"f")))
-source('../h2o-runit.R')
+source("../../scripts/h2o-r-test-setup.R")
 
-test.australia.golden <- function(H2Oserver) {
+
+
+test.australia.golden <- function() {
   Log.info("Importing AustraliaCoast.csv data...") 
   australiaR <- read.csv(locate("smalldata/pca_test/AustraliaCoast.csv"), header = TRUE)
-  australiaH2O <- h2o.uploadFile(H2Oserver, locate("smalldata/pca_test/AustraliaCoast.csv"), destination_frame = "australiaH2O")
+  australiaH2O <- h2o.uploadFile(locate("smalldata/pca_test/AustraliaCoast.csv"), destination_frame = "australiaH2O")
   
   k_test <- sort(sample(1:8,3))
   for(k in k_test) {
@@ -28,7 +30,7 @@ test.australia.golden <- function(H2Oserver) {
     fitH2O <- h2o.prcomp(australiaH2O, k = k, transform = 'STANDARDIZE', max_iterations = 2000)
     checkPCAModel(fitH2O, fitR, tolerance = 1e-5)
   }
-  testEnd()
+  
 }
 
 doTest("PCA Golden Test: AustraliaCoast with Variable K", test.australia.golden)

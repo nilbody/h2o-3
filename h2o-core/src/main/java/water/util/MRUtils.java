@@ -1,15 +1,19 @@
 package water.util;
 
-import static water.util.RandomUtils.getRNG;
-
 import water.*;
 import water.H2O.H2OCallback;
 import water.H2O.H2OCountedCompleter;
-import water.fvec.*;
+import water.fvec.Chunk;
+import water.fvec.Frame;
+import water.fvec.NewChunk;
+import water.fvec.Vec;
+import water.nbhm.NonBlockingHashMap;
 
 import java.util.Arrays;
 import java.util.Random;
 import java.util.concurrent.atomic.AtomicInteger;
+
+import static water.util.RandomUtils.getRNG;
 
 public class MRUtils {
 
@@ -31,17 +35,19 @@ public class MRUtils {
     Frame r = new MRTask() {
       @Override
       public void map(Chunk[] cs, NewChunk[] ncs) {
-        final Random rng = getRNG(seed + cs[0].cidx());
+        final Random rng = getRNG(0);
         int count = 0;
-        for (int r = 0; r < cs[0]._len; r++)
+        for (int r = 0; r < cs[0]._len; r++) {
+          rng.setSeed(seed+r+cs[0].start());
           if (rng.nextFloat() < fraction || (count == 0 && r == cs[0]._len-1) ) {
             count++;
             for (int i = 0; i < ncs.length; i++) {
               ncs[i].addNum(cs[i].atd(r));
             }
           }
+        }
       }
-    }.doAll(fr.numCols(), fr).outputFrame(newKey, fr.names(), fr.domains());
+    }.doAll(fr.types(), fr).outputFrame(newKey, fr.names(), fr.domains());
     if (r.numRows() == 0) {
       Log.warn("You asked for " + rows + " rows (out of " + fr.numRows() + "), but you got none (seed=" + seed + ").");
       Log.warn("Let's try again. You've gotta ask yourself a question: \"Do I feel lucky?\"");
@@ -59,16 +65,16 @@ public class MRUtils {
     return new MRTask() {
       @Override
       public void map(Chunk[] cs, NewChunk[] ncs) {
-        long[] idx = new long[cs[0]._len];
+        int[] idx = new int[cs[0]._len];
         for (int r=0; r<idx.length; ++r) idx[r] = r;
-        ArrayUtils.shuffleArray(idx, seed);
+        ArrayUtils.shuffleArray(idx, getRNG(seed));
         for (long anIdx : idx) {
           for (int i = 0; i < ncs.length; i++) {
             ncs[i].addNum(cs[i].atd((int) anIdx));
           }
         }
       }
-    }.doAll(fr.numCols(), fr).outputFrame(fr.names(), fr.domains());
+    }.doAll(fr.numCols(), Vec.T_NUM, fr).outputFrame(fr.names(), fr.domains());
   }
 
   /**
@@ -78,7 +84,7 @@ public class MRUtils {
    * Usage 1: Label vector is categorical
    * ------------------------------------
    * Vec label = ...;
-   * assert(label.isEnum());
+   * assert(label.isCategorical());
    * double[] dist = new ClassDist(label).doAll(label).dist();
    *
    * Usage 2: Label vector is numerical
@@ -115,11 +121,50 @@ public class MRUtils {
     @Override public void reduce( ClassDist that ) { ArrayUtils.add(_ys,that._ys); }
   }
 
+  public static class Dist extends MRTask<Dist> {
+    private transient NonBlockingHashMap<Double,Integer> _dist;
+    @Override public void map(Chunk ys) {
+      _dist = new NonBlockingHashMap<>();
+      for( int row=0; row< ys._len; row++ )
+        if( !ys.isNA(row) ) {
+          double v = ys.atd(row);
+          Integer oldV = _dist.putIfAbsent(v,1);
+          if( oldV!=null ) _dist.put(v,oldV+1);
+        }
+    }
+
+    @Override public void reduce(Dist mrt) {
+      if( _dist != mrt._dist ) {
+        NonBlockingHashMap<Double,Integer> l = _dist;
+        NonBlockingHashMap<Double,Integer> r = mrt._dist;
+        if( l.size() < r.size() ) { l=r; r=_dist; }
+        for( Double v: r.keySet() ) {
+          Integer oldVal = l.putIfAbsent(v, r.get(v));
+          if( oldVal!=null ) l.put(v, oldVal+r.get(v));
+        }
+        _dist=l;
+        mrt._dist=null;
+      }
+    }
+    public double[] dist() {
+      int i=0;
+      double[] dist = new double[_dist.size()];
+      for( int v: _dist.values() ) dist[i++] = v;
+      return dist;
+    }
+    public double[] keys() {
+      int i=0;
+      double[] keys = new double[_dist.size()];
+      for( double v: _dist.keySet() ) keys[i++] = v;
+      return keys;
+    }
+  }
+
 
   /**
    * Stratified sampling for classifiers - FIXME: For weights, this is not accurate, as the sampling is done with uniform weights
    * @param fr Input frame
-   * @param label Label vector (must be enum)
+   * @param label Label vector (must be categorical)
    * @param weights Weights vector, can be null
    * @param sampling_ratios Optional: array containing the requested sampling ratios per class (in order of domains), will be overwritten if it contains all 0s
    * @param maxrows Maximum number of rows in the returned frame
@@ -130,7 +175,7 @@ public class MRUtils {
    */
   public static Frame sampleFrameStratified(final Frame fr, Vec label, Vec weights, float[] sampling_ratios, long maxrows, final long seed, final boolean allowOversampling, final boolean verbose) {
     if (fr == null) return null;
-    assert(label.isEnum());
+    assert(label.isCategorical());
     if (maxrows < label.domain().length) {
       Log.warn("Attempting to do stratified sampling to fewer samples than there are class labels - automatically increasing to #rows == #labels (" + label.domain().length + ").");
       maxrows = label.domain().length;
@@ -205,7 +250,7 @@ public class MRUtils {
   // currently hardcoded to do up to 10 tries to get a row from each class, which can be impossible for certain wrong sampling ratios
   private static Frame sampleFrameStratified(final Frame fr, Vec label, Vec weights, final float[] sampling_ratios, final long seed, final boolean debug, int count) {
     if (fr == null) return null;
-    assert(label.isEnum());
+    assert(label.isCategorical());
     assert(sampling_ratios != null && sampling_ratios.length == label.domain().length);
     final int labelidx = fr.find(label); //which column is the label?
     assert(labelidx >= 0);
@@ -217,9 +262,10 @@ public class MRUtils {
     Frame r = new MRTask() {
       @Override
       public void map(Chunk[] cs, NewChunk[] ncs) {
-        final Random rng = getRNG(seed + cs[0].cidx());
+        final Random rng = getRNG(seed);
         for (int r = 0; r < cs[0]._len; r++) {
           if (cs[labelidx].isNA(r)) continue; //skip missing labels
+          rng.setSeed(cs[0].start()+r+seed);
           final int label = (int)cs[labelidx].at8(r);
           assert(sampling_ratios.length > label && label >= 0);
           int sampling_reps;
@@ -237,7 +283,7 @@ public class MRUtils {
           }
         }
       }
-    }.doAll(fr.numCols(), fr).outputFrame(fr.names(), fr.domains());
+    }.doAll(fr.types(), fr).outputFrame(fr.names(), fr.domains());
 
     // Confirm the validity of the distribution
     Vec lab = r.vecs()[labelidx];

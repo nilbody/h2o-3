@@ -1,11 +1,16 @@
 package water.util;
 
+import water.DKV;
+import water.Futures;
+import water.Key;
 import water.MemoryManager;
+import water.fvec.AppendableVec;
+import water.fvec.Frame;
+import water.fvec.NewChunk;
+import water.fvec.Vec;
 
 import java.text.DecimalFormat;
-import java.util.Arrays;
-import java.util.Comparator;
-import java.util.Random;
+import java.util.*;
 
 import static water.util.RandomUtils.getRNG;
 
@@ -33,7 +38,16 @@ public class ArrayUtils {
     for (double d: from) result += d;
     return result;
   }
-
+  public static float[] reduceMin(float[] a, float[] b) {
+    for (int i=0; i<a.length; ++i)
+      a[i] = Math.min(a[i], b[i]);
+    return a;
+  }
+  public static float[] reduceMax(float[] a, float[] b) {
+    for (int i=0; i<a.length; ++i)
+      a[i] = Math.max(a[i], b[i]);
+    return a;
+  }
   public static double innerProduct(double [] x, double [] y){
     double result = 0;
     for (int i = 0; i < x.length; i++)
@@ -50,6 +64,13 @@ public class ArrayUtils {
   }
 
   public static double l2norm2(double [] x){ return l2norm2(x, false); }
+
+  public static double l2norm2(double [][] xs, boolean skipLast){
+    double res = 0;
+    for(double [] x:xs)
+      res += l2norm2(x,skipLast);
+    return res;
+  }
   public static double l2norm2(double [] x, boolean skipLast){
     double sum = 0;
     int last = x.length - (skipLast?1:0);
@@ -57,6 +78,23 @@ public class ArrayUtils {
       sum += x[i]*x[i];
     return sum;
   }
+  public static double l2norm2(double[] x, double[] y) {  // Computes \sum_{i=1}^n (x_i - y_i)^2
+    assert x.length == y.length;
+    double sse = 0;
+    for(int i = 0; i < x.length; i++) {
+      double diff = x[i] - y[i];
+      sse += diff * diff;
+    }
+    return sse;
+  }
+  public static double l2norm2(double[][] x, double[][] y) {
+    assert x.length == y.length && x[0].length == y[0].length;
+    double sse = 0;
+    for(int i = 0; i < x.length; i++)
+      sse += l2norm2(x[i], y[i]);
+    return sse;
+  }
+
   public static double l1norm(double [] x){ return l1norm(x, false); }
   public static double l1norm(double [] x, boolean skipLast){
     double sum = 0;
@@ -78,6 +116,8 @@ public class ArrayUtils {
   public static double l2norm(double [] x, boolean skipLast){
     return Math.sqrt(l2norm2(x, skipLast));
   }
+  public static double l2norm(double[] x, double[] y) { return Math.sqrt(l2norm2(x,y)); }
+  public static double l2norm(double[][] x, double[][] y) { return Math.sqrt(l2norm2(x,y)); }
 
   // Add arrays, element-by-element
   public static byte[] add(byte[] a, byte[] b) {
@@ -147,7 +187,7 @@ public class ArrayUtils {
     return a;
   }
   public static double[][] add(double[][] a, double[][] b) {
-    for(int i = 0; i < a.length; i++ ) a[i] = add(a[i],b[i]);
+    for(int i = 0; i < a.length; i++ ) a[i] = add(a[i], b[i]);
     return a;
   }
   public static double[][][] add(double[][][] a, double[][][] b) {
@@ -192,14 +232,24 @@ public class ArrayUtils {
     return ds;
   }
   public static float[] mult(float[] nums, float n) {
-    assert !Float.isInfinite(n) : "Trying to multiply " + Arrays.toString(nums) + " by  " + n; // Almost surely not what you want
+//    assert !Float.isInfinite(n) : "Trying to multiply " + Arrays.toString(nums) + " by  " + n; // Almost surely not what you want
     for (int i=0; i<nums.length; i++) nums[i] *= n;
     return nums;
   }
   public static double[] mult(double[] nums, double n) {
-    assert !Double.isInfinite(n) : "Trying to multiply " + Arrays.toString(nums) + " by  " + n; // Almost surely not what you want
+//    assert !Double.isInfinite(n) : "Trying to multiply " + Arrays.toString(nums) + " by  " + n; // Almost surely not what you want
     for (int i=0; i<nums.length; i++) nums[i] *= n;
     return nums;
+  }
+  public static double[][] mult(double[][] ary, double n) {
+    if(ary == null) return null;
+    for (int i=0; i<ary.length; i++) mult(ary[i], n);
+    return ary;
+  }
+  public static double[] invert(double[] ary) {
+    if(ary == null) return null;
+    for(int i=0;i<ary.length;i++) ary[i] = 1. / ary[i];
+    return ary;
   }
 
   public static double[] multArrVec(double[][] ary, double[] nums) {
@@ -292,10 +342,10 @@ public class ArrayUtils {
   }
   public static double[][] formGram(double[][] x) { return formGram(x, false); }
 
-  public static String[] permuteCols(String[] vec, int[] idx) {
+  public static double[] permute(double[] vec, int[] idx) {
     if(vec == null) return null;
     assert vec.length == idx.length : "Length of vector must match permutation vector length: Got " + vec.length + " != " + idx.length;
-    String[] res = new String[vec.length];
+    double[] res = new double[vec.length];
 
     for(int i = 0; i < vec.length; i++)
       res[i] = vec[idx[i]];
@@ -312,6 +362,14 @@ public class ArrayUtils {
     }
     return res;
   }
+  public static double[][] permuteRows(double[][] ary, int[] idx) {
+    if(ary == null) return null;
+    assert ary.length == idx.length : "Number of rows must match permutation vector length: Got " + ary.length + " != " + idx.length;
+    double[][] res = new double[ary.length][ary[0].length];
+    for(int i = 0; i < ary.length; i++)
+      res[i] = permute(ary[i], idx);
+    return res;
+  }
 
   public static double [][] generateLineSearchVecs(double [] srcVec, double [] gradient, int n, final double step) {
     double [][] res = new double[n][];
@@ -325,6 +383,18 @@ public class ArrayUtils {
     return res;
   }
 
+  public static String arrayToString(int[] ary) {
+    if (ary == null || ary.length==0 ) return "";
+    int m = ary.length - 1;
+
+    StringBuilder sb = new StringBuilder();
+    for (int i = 0; ; i++) {
+      sb.append(ary[i]);
+      if (i == m) return sb.toString();
+      sb.append(", ");
+    }
+  }
+
   // Convert array of primitives to an array of Strings.
   public static String[] toString(long[] dom) {
     String[] result = new String[dom.length];
@@ -336,6 +406,27 @@ public class ArrayUtils {
     for (int i=0; i<dom.length; i++) result[i] = String.valueOf(dom[i]);
     return result;
   }
+  public static String[] toString(Object[] ary) {
+    String[] result = new String[ary.length];
+    for (int i=0; i<ary.length; i++) {
+      Object o = ary[i];
+      if (o != null && o.getClass().isArray()) {
+        Class klazz = ary[i].getClass();
+        result[i] = byte[].class.equals(klazz) ? Arrays.toString((byte[]) o) :
+                    short[].class.equals(klazz) ? Arrays.toString((short[]) o) :
+                    int[].class.equals(klazz) ? Arrays.toString((int[]) o) :
+                    long[].class.equals(klazz) ? Arrays.toString((long[]) o) :
+                    boolean[].class.equals(klazz) ? Arrays.toString((boolean[]) o) :
+                    float[].class.equals(klazz) ? Arrays.toString((float[]) o) :
+                    double[].class.equals(klazz) ? Arrays.toString((double[]) o) : Arrays.toString((Object[]) o);
+
+      } else {
+        result[i] = String.valueOf(o);
+      }
+    }
+    return result;
+  }
+
   public static boolean contains(String[] names, String name) {
     if (null == names) return false;
     for (String n : names) if (n.equals(name)) return true;
@@ -429,6 +520,12 @@ public class ArrayUtils {
       if (from[i]<from[result]) result = i;
     return result;
   }
+  public static int minIndex(double[] from) {
+    int result = 0;
+    for (int i = 1; i<from.length; ++i)
+      if (from[i]<from[result]) result = i;
+    return result;
+  }
   public static double maxValue(double[] ary) {
     return maxValue(ary,0,ary.length);
   }
@@ -471,12 +568,26 @@ public class ArrayUtils {
       if (from[i]<result) result = from[i];
     return result;
   }
+  public static long minValue(int[] from) {
+    int result = from[0];
+    for (int i = 1; i<from.length; ++i)
+      if (from[i]<result) result = from[i];
+    return result;
+  }
 
   // Find an element with linear search & return it's index, or -1
-  public static <T> int find(T[] ts, T elem) {
-    for( int i=0; i<ts.length; i++ )
-      if( elem==ts[i] || elem.equals(ts[i]) )
+  public static <T> int find(T[] ts, T elem) {return find(ts,elem,0);}
+
+  // Find an element with linear search & return it's index, or -1
+  public static <T> int find(T[] ts, T elem, int off) {
+    for (int i = off; i < ts.length; i++)
+      if (elem == ts[i] || elem.equals(ts[i]))
         return i;
+    return -1;
+  }
+  public static int find(long[] ls, long elem) {
+    for(int i=0; i<ls.length; ++i )
+      if( elem==ls[i] ) return i;
     return -1;
   }
 
@@ -535,6 +646,11 @@ public class ArrayUtils {
     a[i] = a[change];
     a[change] = helper;
   }
+  private static void swap(int[] a, int i, int change) {
+    int helper = a[i];
+    a[i] = a[change];
+    a[change] = helper;
+  }
 
   /**
    * Extract a shuffled array of integers
@@ -561,12 +677,10 @@ public class ArrayUtils {
     return result;
   }
 
-  public static void shuffleArray(long[] a, long seed) {
+  public static void shuffleArray(int[] a, Random rng) {
     int n = a.length;
-    Random random = getRNG(seed);
-    random.nextInt();
     for (int i = 0; i < n; i++) {
-      int change = i + random.nextInt(n - i);
+      int change = i + rng.nextInt(n - i);
       swap(a, i, change);
     }
   }
@@ -585,10 +699,10 @@ public class ArrayUtils {
     return result;
   }
   public static double[] gaussianVector(int n) { return gaussianVector(n, System.currentTimeMillis()); }
-  public static double[] gaussianVector(int n, long seed) {
+  public static double[] gaussianVector(int n, long seed) { return gaussianVector(n, getRNG(seed)); }
+  public static double[] gaussianVector(int n, Random random) {
     if(n <= 0) return null;
     double[] result = new double[n];
-    Random random = getRNG(seed);
 
     for(int i = 0; i < n; i++)
       result[i] = random.nextGaussian();
@@ -794,6 +908,12 @@ public class ArrayUtils {
     System.arraycopy(b,0,tmp,a.length,b.length);
     return tmp;
   }
+  public static int[] append(int[] a, int b) {
+    if( a==null || a.length == 0) return  new int[]{b};
+    int[] tmp = Arrays.copyOf(a,a.length+1);
+    tmp[a.length] = b;
+    return tmp;
+  }
 
   static public String[] prepend(String[] ary, String s) {
     if (ary==null) return new String[] { s };
@@ -835,6 +955,12 @@ public class ArrayUtils {
     return newArray;
   }
 
+  static public double[] copyFromIntArray(int[] a) {
+    double[] da = new double[a.length];
+    for(int i=0;i<a.length;++i) da[i] = a[i];
+    return da;
+  }
+
   // sparse sortedMerge (ids and vals)
   public static void sortedMerge(int[] aIds, double [] aVals, int[] bIds, double [] bVals, int [] resIds, double [] resVals) {
     int i = 0, j = 0;
@@ -871,6 +997,14 @@ public class ArrayUtils {
     return res;
   }
 
+  public static double[] select(double[] ary, int[] idxs) {
+    double [] res = MemoryManager.malloc8d(idxs.length);
+    for(int i = 0; i < res.length; ++i)
+      res[i] = ary[idxs[i]];
+    return res;
+  }
+
+
   /**
    * Sort an integer array of indices based on values
    * Updates indices in place, keeps values the same
@@ -878,7 +1012,7 @@ public class ArrayUtils {
    * @param values values
    */
   public static void sort(final int[] idxs, final double[] values) {
-    sort(idxs, values, 50);
+    sort(idxs, values, 500);
   }
   public static void sort(final int[] idxs, final double[] values, int cutoff) {
     if (idxs.length < cutoff) {
@@ -934,4 +1068,137 @@ public class ArrayUtils {
     }
     return result;
   }
+
+  public static double[] flat(double[][] arr) {
+    if (arr == null) return null;
+    if (arr.length == 0) return null;
+    int tlen = 0;
+    for (double[] t : arr) tlen += t.length;
+    double[] result = Arrays.copyOf(arr[0], tlen);
+    int j = arr[0].length;
+    for (int i = 1; i < arr.length; i++) {
+      System.arraycopy(arr[i], 0, result, j, arr[i].length);
+      j += arr[i].length;
+    }
+    return result;
+  }
+
+  public static Object[][] zip(Object[] a, Object[] b) {
+    if (a.length != b.length) throw new IllegalArgumentException("Cannot zip arrays of different lenghts!");
+    Object[][] result = new Object[a.length][2];
+    for (int i = 0; i < a.length; i++) {
+      result[i][0] = a[i];
+      result[i][1] = b[i];
+    }
+
+    return result;
+  }
+
+  public static <K, V> int crossProductSize(Map<K, V[]> hyperSpace) {
+    int size = 1;
+    for (Map.Entry<K,V[]> entry : hyperSpace.entrySet()) {
+      V[] value = entry.getValue();
+      size *= value != null ? value.length : 1;
+    }
+    return size;
+  }
+
+  public static Integer[] interval(Integer start, Integer end) {
+    return interval(start, end, 1);
+  }
+  public static Integer[] interval(Integer start, Integer end, Integer step) {
+    int len = 1 + (end - start) / step; // Include both ends of interval
+    Integer[] result = new Integer[len];
+    for(int i = 0, value = start; i < len; i++, value += step) {
+      result[i] = value;
+    }
+    return result;
+  }
+
+  public static Float[] interval(Float start, Float end, Float step) {
+    int len = 1 + (int)((end - start) / step); // Include both ends of interval
+    Float[] result = new Float[len];
+    Float value = start;
+    for(int i = 0; i < len; i++, value = start + i*step) {
+      result[i] = value;
+    }
+    return result;
+  }
+
+  public static String [] remove(String [] ary, String s) {
+    if(s == null)return ary;
+    int cnt = 0;
+    int idx = find(ary,s);
+    while(idx > 0) {
+      ++cnt;
+      idx = find(ary,s,++idx);
+    }
+    if(cnt == 0)return ary;
+    String [] res = new String[ary.length-cnt];
+    int j = 0;
+    for(String x:ary)
+      if(!x.equals(s))
+        res[j++] = x;
+    return res;
+  }
+
+  /** Create a new frame based on given row data.
+   *  @param key   Key for the frame
+   *  @param names names of frame columns
+   *  @param rows  data given in the form of rows
+   *  @return new frame which contains columns named according given names and including given data */
+  public static Frame frame(Key key, String[] names, double[]... rows) {
+    assert names == null || names.length == rows[0].length;
+    Futures fs = new Futures();
+    Vec[] vecs = new Vec[rows[0].length];
+    Key keys[] = Vec.VectorGroup.VG_LEN1.addVecs(vecs.length);
+    int rowLayout = -1;
+    for( int c = 0; c < vecs.length; c++ ) {
+      AppendableVec vec = new AppendableVec(keys[c], Vec.T_NUM);
+      NewChunk chunk = new NewChunk(vec, 0);
+      for (double[] row : rows) chunk.addNum(row[c]);
+      chunk.close(0, fs);
+      if( rowLayout== -1) rowLayout = vec.compute_rowLayout();
+      vecs[c] = vec.close(rowLayout,fs);
+    }
+    fs.blockForPending();
+    Frame fr = new Frame(key, names, vecs);
+    if( key != null ) DKV.put(key, fr);
+    return fr;
+  }
+  public static Frame frame(double[]... rows) { return frame(null, rows); }
+  public static Frame frame(String[] names, double[]... rows) { return frame(Key.make(), names, rows); }
+  public static Frame frame(String name, Vec vec) { Frame f = new Frame(); f.add(name, vec); return f; }
+
+  /**
+   * Remove b from a, both a,b are assumed to be sorted.
+   */
+  public static int[] removeSorted(int [] a, int [] b) {
+    int [] indeces = new int[b.length];
+    indeces[0] = Arrays.binarySearch(a,0,a.length,b[0]);
+    if(indeces[0] < 0)
+      throw new NoSuchElementException("value " + b[0] + " not found in the first array.");
+    for(int i = 1; i < b.length; ++i) {
+      indeces[i] = Arrays.binarySearch(a,indeces[i-1],a.length,b[i]);
+      if(indeces[i] < 0)
+        throw new NoSuchElementException("value " + b[i] + " not found in the first array.");
+    }
+    return removeIds(a,indeces);
+  }
+
+  public static int[] removeIds(int[] x, int[] ids) {
+    int [] res = new int[x.length-ids.length];
+    int j = 0;
+    for(int i = 0; i < x.length; ++i)
+      if(j == ids.length || i != ids[j]) res[i-j] = x[i]; else ++j;
+    return res;
+  }
+  public static double[] removeIds(double[] x, int[] ids) {
+    double [] res = new double[x.length-ids.length];
+    int j = 0;
+    for(int i = 0; i < x.length; ++i)
+      if(i != ids[j]) res[i-j] = x[i]; else ++j;
+    return res;
+  }
+
 }

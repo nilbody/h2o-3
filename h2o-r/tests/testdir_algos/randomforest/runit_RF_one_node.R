@@ -1,7 +1,9 @@
 setwd(normalizePath(dirname(R.utils::commandArgs(asValues=TRUE)$"f")))
-source('../../h2o-runit.R')
+source("../../../scripts/h2o-r-test-setup.R")
 
-test.one.node.drf <- function(conn) {
+
+
+test.one.node.drf <- function() {
   Log.info("Loading data and building models...")
   airs.hex <- h2o.importFile(locate("smalldata/airlines/allyears2k.zip"))
 
@@ -34,7 +36,7 @@ test.one.node.drf <- function(conn) {
     expect_equal(h2o.r2(drf.sing), h2o.r2(drf.mult), tolerance = 0.01)
   }
 
-  testEnd()
+  
 }
 
 doTest("Testing One Node vs Multi Node Random Forest", test.one.node.drf)

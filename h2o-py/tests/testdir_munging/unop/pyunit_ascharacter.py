@@ -1,14 +1,22 @@
 import sys
-sys.path.insert(1, "../../../")
+sys.path.insert(1,"../../../")
 import h2o
+from tests import pyunit_utils
 
-def ascharacter(ip,port):
-    h2oframe =  h2o.import_frame(path=h2o.locate("smalldata/junit/cars.csv"))
+
+
+
+def ascharacter():
+    h2oframe =  h2o.import_file(path=pyunit_utils.locate("smalldata/junit/cars.csv"))
     h2oframe.show()
     h2oframe['cylinders'] = h2oframe['cylinders'].asfactor()
     h2oframe['cylinders'].ascharacter()
-    assert h2oframe["cylinders"].isfactor(), "expected the column be a factor"
-    assert not h2oframe["cylinders"].isstring(), "expected the column to not be a string"
+    assert h2oframe["cylinders"].isfactor()[0], "expected the column be a factor"
+    assert not h2oframe["cylinders"].isstring()[0], "expected the column to not be a string"
+
+
 
 if __name__ == "__main__":
-    h2o.run_test(sys.argv, ascharacter)
+    pyunit_utils.standalone_test(ascharacter)
+else:
+    ascharacter()

@@ -1,10 +1,12 @@
 setwd(normalizePath(dirname(R.utils::commandArgs(asValues=TRUE)$"f")))
-source('../../h2o-runit.R')
+source("../../../scripts/h2o-r-test-setup.R")
+
+
 
 # Test PCA on USArrests.csv
-test.pca.arrests <- function(conn) {
+test.pca.arrests <- function() {
   Log.info("Importing USArrests.csv data...\n")
-  arrests.hex <- h2o.uploadFile(conn, locate("smalldata/pca_test/USArrests.csv"))
+  arrests.hex <- h2o.uploadFile(locate("smalldata/pca_test/USArrests.csv"))
   arrests.sum <- summary(arrests.hex)
   print(arrests.sum)
 
@@ -15,7 +17,7 @@ test.pca.arrests <- function(conn) {
     print(arrests.pca.h2o)
   }
   
-  testEnd()
+  
 }
 
 doTest("PCA Test: USArrests Data", test.pca.arrests)

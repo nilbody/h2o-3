@@ -1,12 +1,14 @@
 setwd(normalizePath(dirname(R.utils::commandArgs(asValues=TRUE)$"f")))
-source('../../h2o-runit.R')
+source("../../../scripts/h2o-r-test-setup.R")
 
-test.gbm.imbalanced <- function(conn) {
-  covtype <- h2o.uploadFile(conn, locate("smalldata/covtype/covtype.20k.data"))
+
+
+test.gbm.imbalanced <- function() {
+  covtype <- h2o.uploadFile(locate("smalldata/covtype/covtype.20k.data"))
   covtype[,55] <- as.factor(covtype[,55])
 
   hh_imbalanced<-h2o.gbm(x=c(1:54),y=55,ntrees=10,min_rows=5,learn_rate=0.2,training_frame=covtype,distribution="multinomial",balance_classes=F)
-  hh_balanced  <-h2o.gbm(x=c(1:54),y=55,ntrees=10,min_rows=5,learn_rate=0.2,training_frame=covtype,distribution="multinomial",balance_classes=T, seed=0) #seed is used for (over-)sampling to obtain class balance
+  hh_balanced  <-h2o.gbm(x=c(1:54),y=55,ntrees=10,min_rows=5,learn_rate=0.2,training_frame=covtype,distribution="multinomial",balance_classes=T, seed=1) #seed is used for (over-)sampling to obtain class balance
   hh_imbalanced_metrics <- h2o.performance(hh_imbalanced)
   hh_balanced_metrics   <- h2o.performance(hh_balanced  )
 
@@ -22,7 +24,7 @@ test.gbm.imbalanced <- function(conn) {
 
   expect_true(class_6_err_imbalanced >= 0.99*class_6_err_balanced, "balance_classes makes it at least 1% worse!")
 
-  testEnd()
+  
 }
 
 doTest("GBM imbalanced", test.gbm.imbalanced)

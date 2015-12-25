@@ -1,18 +1,26 @@
 import sys
-sys.path.insert(1, "../../")
+sys.path.insert(1,"../../")
 import h2o
+from tests import pyunit_utils
 
-def frame_show(ip,port):
-    # Connect to h2o
-    h2o.init(ip,port)
 
-    iris = h2o.import_frame(path=h2o.locate("smalldata/iris/iris_wheader.csv"))
-    prostate = h2o.import_frame(path=h2o.locate("smalldata/prostate/prostate.csv.zip"))
-    airlines = h2o.import_frame(path=h2o.locate("smalldata/airlines/allyears2k.zip"))
+
+
+def frame_show():
+    
+    
+
+    iris = h2o.import_file(path=pyunit_utils.locate("smalldata/iris/iris_wheader.csv"))
+    prostate = h2o.import_file(path=pyunit_utils.locate("smalldata/prostate/prostate.csv.zip"))
+    airlines = h2o.import_file(path=pyunit_utils.locate("smalldata/airlines/allyears2k.zip"))
 
     iris.show()
     prostate.show()
     airlines.show()
 
+
+
 if __name__ == "__main__":
-    h2o.run_test(sys.argv, frame_show)
+    pyunit_utils.standalone_test(frame_show)
+else:
+    frame_show()

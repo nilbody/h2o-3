@@ -1,7 +1,9 @@
 setwd(normalizePath(dirname(R.utils::commandArgs(asValues=TRUE)$"f")))
-source('../../h2o-runit.R')
+source("../../../scripts/h2o-r-test-setup.R")
 
-test.one.node.gbm <- function(conn) {
+
+
+test.one.node.gbm <- function() {
   Log.info("Loading data and building models...")
   airs.hex <- h2o.importFile(locate("smalldata/airlines/allyears2k.zip"))
 
@@ -33,7 +35,7 @@ test.one.node.gbm <- function(conn) {
     expect_equal(h2o.r2(gbm.sing), h2o.r2(gbm.mult))
   }
 
-  testEnd()
+  
 }
 
 doTest("Testing One Node vs Multi Node GBM", test.one.node.gbm)

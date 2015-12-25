@@ -3,7 +3,7 @@ package water.api;
 import water.H2O;
 import water.MRTask;
 import water.exceptions.H2OColumnNotFoundArgumentException;
-import water.exceptions.H2OEnumLevelNotFoundArgumentException;
+import water.exceptions.H2OCategoricalLevelNotFoundArgumentException;
 import water.exceptions.H2OIllegalArgumentException;
 import water.fvec.Chunk;
 import water.fvec.Frame;
@@ -15,7 +15,7 @@ class FindHandler extends Handler {
 
   @SuppressWarnings("unused") // called through reflection by RequestServer
   public FindV3 find(int version, FindV3 find) {
-    Frame frame = find.key.createAndFillImpl();
+    Frame frame = find.key._fr;
     // Peel out an optional column; restrict to this column
     if( find.column != null ) {
       Vec vec = frame.vec(find.column);
@@ -27,9 +27,9 @@ class FindHandler extends Handler {
     Vec[] vecs = frame.vecs();
     double ds[] = new double[vecs.length];
     for( int i=0; i<vecs.length; i++ ) {
-      if( vecs[i].isEnum() ) {
+      if( vecs[i].isCategorical() ) {
         int idx = ArrayUtils.find(vecs[i].domain(),find.match);
-        if( idx==-1 && vecs.length==1 ) throw new H2OEnumLevelNotFoundArgumentException("match", find.match, frame._key.toString(), frame.name(i));
+        if( idx==-1 && vecs.length==1 ) throw new H2OCategoricalLevelNotFoundArgumentException("match", find.match, frame._key.toString(), frame.name(i));
         ds[i] = idx;
       } else if( vecs[i].isUUID() ) {
         throw H2O.unimpl();
@@ -62,10 +62,14 @@ class FindHandler extends Handler {
   }
 
   private static class Find extends MRTask<Find> {
+    private final byte _priority; // Allow higher priority for GUI work
     final long _row;
     final double[] _ds;
     long _prev, _next;
-    Find( long row, double[] ds ) { _row = row; _ds = ds; _prev = -1; _next = Long.MAX_VALUE; }
+    Find( long row, double[] ds ) { 
+      _row = row; _ds = ds; _prev = -1; _next = Long.MAX_VALUE; 
+      _priority = (Thread.currentThread() instanceof H2O.FJWThr) ? nextThrPriority() : H2O.GUI_PRIORITY - 2;
+    }
     @Override public void map( Chunk cs[] ) {
       for( int col = 0; col<cs.length; col++ ) {
         Chunk C = cs[col];
@@ -82,5 +86,6 @@ class FindHandler extends Handler {
       if( _prev < f._prev ) _prev = f._prev;
       if( _next > f._next ) _next = f._next;
     }
+    @Override public byte priority() { return _priority; }
   }
 }

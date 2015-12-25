@@ -84,16 +84,29 @@ To learn more about performance characteristics when implementing new algorithms
 
 **How do I find the standard errors of the parameter estimates (p-values)?**
 
-P-values are currently not supported. They are on our road map and will be added, depending on the current customer demand/priorities. Generally, adding p-values involves significant engineering effort because p-values for regularized GLM are not straightforward and have been defined only recently (with no standard implementation available that we know of). P-values for a restricted set of GLM problems (no regularization, low number of predictors) are easier to do and may be added sooner, if there is a sufficient demand.
+P-values are currently supported for non-regularized GLM. The following requirements must be met:
 
-For now, we recommend using a non-zero l1 penalty (alpha  > 0) and considering all non-zero coefficients in the model as significant. The recommended use case is running GLM with lambda search enabled and alpha > 0 and picking the best lambda value based on cross-validation or hold-out set validation.
+- The family cannot be multinomial
+- The lambda value must be equal to zero
+- The IRLSM solver must be used
+- Lambda search cannot be used 
+
+To generate p-values, do one of the following:
+
+- check the *compute_p_values* checkbox in the GLM model builder in Flow
+- use `compute_p_values=TRUE` in R or Python while creating the model
+
+The p-values are listed in the coefficients table (as shown in the following example screenshot): 
+
+  ![Coefficients Table with P-values](images/Flow_Pvalues.png) 
+
 
 ---
 
 **How do I specify regression or classification for Distributed Random Forest in the web UI?**
 
 
-If the response column is numeric, H2O generates a regression model. If the response column is enum, the model uses classification. To specify the column type, select it from the drop-down column heading list in the **Data Preview** section during parsing. 
+If the response column is numeric, H2O generates a regression model. If the response column is enum, the model uses classification. To specify the column type, select it from the drop-down column name list in the **Edit Column Names and Types** section during parsing. 
 
 ---
 
@@ -153,10 +166,6 @@ H2O’s DL autoencoder is based on the standard deep (multi-layer) neural net ar
 
 ---
 
-<!---
-
-#commenting out as still in dev but wanted to save for later
-
 **Are there any H2O examples using text for classification?**
 
 Currently, the following examples are available for Sparkling Water: 
@@ -167,10 +176,73 @@ https://github.com/h2oai/sparkling-water/blob/master/examples/scripts/mlconf_201
 b) Use Word2Vec Skip-gram model + GBM for classifying job titles 
 https://github.com/h2oai/sparkling-water/blob/master/examples/scripts/craigslistJobTitles.scala 
 
--->
+---
+
+**Most machine learning tools cannot predict with a new categorical level that was not included in the training set. How does H2O make predictions in this scenario?**
+
+Here is an example of how the prediction process works in H2O: 
+
+0. Train a model using data that has a categorical predictor column with levels B,C, and D (no other levels); this level will be the "training set domain": {B,C,D}
+0. During scoring, the test set has only rows with levels A,C, and E for that column; this is the "test set domain": {A,C,E}
+0. For scoring, a combined "scoring domain" is created, which is the training domain appended with the extra test set domain entries: {B,C,D,A,E} 
+0. Each model can handle these extra levels {A,E} separately during scoring. 
+
+The behavior for unseen categorical levels depends on the algorithm and how it handles missing levels (NA values): 
+
+- DRF and GBM treat missing or NA factor levels as the smallest value present (left-most in the bins), which can go left or right for any split. Unseen factor levels always go left in any split. 
+- Deep Learning creates an extra input neuron for missing and unseen categorical levels, which can remain untrained if there were no missing or unseen categorical levels in the training data, resulting in a random contribution to the next layer during testing. 
+- GLM skips unseen levels in the beta*x dot product. 
+
+---
+
+**How are quantiles computed?**
+
+The quantile results in Flow are computed lazily on-demand and cached. It is a fast approximation (max - min / 1024) that is very accurate for most use cases. 
+If the distribution is skewed, the quantile results may not be as accurate as the results obtained using `h2o.quantile` in R or `H2OFrame.quantile` in Python.  
+
+
+---
+
+**How do I create a classification model? The model always defaults to regression.**
+
+To create a classification model, the response column type must be `enum` - if the response is `numeric`, a regression model is created. 
+
+To convert the response column: 
+
+- Before parsing, click the drop-down menu to the right of the column name or number and select `Enum`
+
+  ![Parsing - Convert to Enum](images/Flow_Parse_ConvertEnum.png)
+
+  or  
+
+- Click on the .hex link for the data frame (or use the `getFrameSummary "<frame_name>.hex"` command, where `<frame_name>` is the name of the frame), then click the **Convert to enum** link to the right of the column name or number
+
+  ![Summary - Convert to Enum](images/Flow_Summary_ConvertToEnum.png)
+
+
+
+---
 
 ##Building H2O
 
+
+**During the build process, the following error message displays. What do I need to do to resolve it?**
+
+```
+Error: Missing name at classes.R:19
+In addition: Warning messages:
+1: @S3method is deprecated. Please use @export instead 
+2: @S3method is deprecated. Please use @export instead 
+Execution halted
+```
+
+To build H2O, [Roxygen2](https://cran.r-project.org/web/packages/roxygen2/vignettes/roxygen2.html) version 4.1.1 is required. 
+ 
+To update your Roxygen2 version, install the `versions` package in R, then use `install.versions("roxygen2", "4.1.1")`. 
+
+
+
+---
 
 **Using `./gradlew build` doesn't generate a build successfully - is there anything I can do to troubleshoot?**
 
@@ -275,6 +347,29 @@ To avoid using 127.0.0.1 on servers with multiple local IP addresses, run the co
 
 ---
 
+**How does the timeline tool work?**
+
+The timeline is a debugging tool that provides information on the current communication between H2O nodes. It shows a snapshot of the most recent messages passed between the nodes. Each node retains its own history of messages sent to or received from other nodes. 
+
+H2O collects these messages from all the nodes and orders them by whether they were sent or received. Each node has an implicit internal order where sent messages must precede received messages on the other node. 
+
+The following information displays for each message: 
+
+- `HH:MM:SS:MS` and `nanosec`: The local time of the event
+- `Who`: The endpoint of the message; can be either a source/receiver node or source node and multicast for broadcasted messages
+- `I/O Type`: The type of communication (either UDP for small messages or TCP for large messages)
+   >**Note**: UDP messages are only sent if the UDP option was enabled when launching H2O or for multicast when a flatfile is not used for configuration. 
+- `Event`: The type of H2O message. The most common type is a distributed task, which displays as `exec` (the requested task) -> `ack` (results of the processed task) -> `ackck` (sender acknowledges receiving the response, task is completed and removed)
+- `rebooted`: Sent during node startup 
+- `heartbeat`: Provides small message tracking information about node health, exchanged periodically between nodes
+- `fetchack`: Aknowledgement of the `Fetch` type task, which retrieves the ID of a previously unseen type
+- `bytes`: Information extracted from the message, including the type of the task and the unique task number 
+
+
+
+---
+
+
 ##Data
 
 **How should I format my SVMLight data before importing?**
@@ -286,7 +381,7 @@ The data must be formatted as a sorted list of unique integers, the column indic
 
 **What date and time formats does H2O support?**
 
-H2O is set to auto-detect two major data/time formats. Because many data time formats are ambiguous (e.g. 01/02/03), general data time detection is not used.  
+H2O is set to auto-detect two major date/time formats. Because many date time formats are ambiguous (e.g. 01/02/03), general date time detection is not used.  
 
 The first format is for dates formatted as yyyy-MM-dd. Year is a four-digit number, the month is a two-digit number ranging from 1 to 12, and the day is a two-digit value ranging from 1 to 31. This format can also be followed by a space and then a time (specified below). 
 
@@ -300,9 +395,29 @@ Times are specified as HH:mm:ss. HH is a two-digit hour and must be a value betw
 
 If there is a name conflict (for example, column 48 isn't named, but C48 already exists), then the column name in concatenated to itself until a unique name is created. So for the previously cited example, H2O will try renaming the column to C48C48, then C48C48C48, and so on until an unused name is generated. 
 
+---
+
+**What types of data columns does H2O support?**
+
+Currently, H2O supports: 
+
+- float (any IEEE double)
+- integer (up to 64bit, but compressed according to actual range)
+- factor (same as integer, but with a String mapping, often handled differently in the algorithms)
+- time (same as 64bit integer, but with a time-since-Unix-epoch interpretation)
+- UUID (128bit integer, no math allowed)
+- String
+
+---
+
+**I am trying to parse a Gzip data file containing multiple files, but it does not parse as quickly as the uncompressed files. Why is this?**
+
+Parsing Gzip files is not done in parallel, so it is sequential and uses only one core. Other parallel parse compression schemes are on the roadmap. 
+
 
 
 ---
+
 
 ##General
 
@@ -319,9 +434,42 @@ Since JSON is just a representation format, it cannot be directly executed, so a
 
 ---
 
+**How do I score using an exported POJO?**
+
+The generated POJO can be used indepedently of a H2O cluster. First use `curl` to send the h2o-genmodel.jar file and the java code for model to the server. The following is an example; the ip address and model names will need to be changed. 
+
+```
+mkdir tmpdir
+cd tmpdir
+curl http://127.0.0.1:54321/3/h2o-genmodel.jar > h2o-genmodel.jar
+curl http://127.0.0.1:54321/3/Models.java/gbm_model > gbm_model.java
+```
+
+To score a simple .CSV file, download the [PredictCSV.java](https://raw.githubusercontent.com/h2oai/h2o-3/master/h2o-r/tests/testdir_javapredict/PredictCSV.java) file and compile it with the POJO. Make a subdirectory for the compilation (this is useful if you have multiple models to score on).
+
+```
+wget https://raw.githubusercontent.com/h2oai/h2o-3/master/h2o-r/tests/testdir_javapredict/PredictCSV.java
+mkdir gbm_model_dir
+javac -cp h2o-genmodel.jar -J-Xmx2g -J-XX:MaxPermSize=128m PredictCSV.java gbm_model.java -d gbm_model_dir
+``` 
+
+Specify the following:
+- the classpath using `-cp` 
+- the model name (or class) using `--model` 
+- the csv file you want to score using `--input` 
+- the location for the predictions using `--output`. 
+ 
+You must match the table column names to the order specified in the POJO. The output file will be in a .hex format, which is a lossless text representation of floating point numbers. Both R and Java will be able to read the hex strings as numerics.
+
+```
+java -ea -cp h2o-genmodel.jar:gbm_model_dir -Xmx4g -XX:MaxPermSize=256m -XX:ReservedCodeCacheSize=256m PredictCSV --header --model gbm_model --input input.csv --output output.csv
+```
+
+---
+
 **How do I predict using multiple response variables?**
 
-Currently, H2O does not support multiple response variables. To predict different response variables, build multiple modes. 
+Currently, H2O does not support multiple response variables. To predict different response variables, build multiple models. 
 
 ---
 
@@ -428,12 +576,6 @@ The H2O launch failed because more memory was requested than was available. Make
 This [PDF](https://github.com/h2oai/h2o-meetups/blob/master/2014_11_18_H2O_in_Big_Data_Environments/H2OinBigDataEnvironments.pdf) includes diagrams and slides depicting how H2O works in big data environments. 
 
 ---
-**How does H2O work with Excel?**
-
-For more information on how H2O works with Excel, refer to this [page](http://learn.h2o.ai/content/demos/excel.html). 
-
-
----
 
 **I received the following error message when launching H2O - how do I resolve the error?**
 
@@ -458,10 +600,147 @@ This error message means that there is a space (or other unsupported character) 
 
 ---
 
+**Does H2O support GPUs?**
+
+Currently, we do not support this capability. If you are interested in contributing your efforts to support this feature to our open-source code database, please contact us at [h2ostream@googlegroups.com](mailto:h2ostream@googlegroups.com). 
+
+
+---
+
+**How can I continue working on a model in H2O after restarting?**
+
+There are a number of ways you can save your model in H2O: 
+
+- In the web UI, click the **Flow** menu then click **Save Flow**. Your flow is saved to the *Flows* tab in the **Help** sidebar on the right. 
+- In the web UI, click the **Flow** menu then click **Download this Flow...**. Depending on your browser and configuration, your flow is saved to the "Downloads" folder (by default) or to the location you specify in the pop-up **Save As** window if it appears. 
+- (For DRF, GBM, and DL models only): Use model checkpointing to resume training a model. Copy the `model_id` number from a built model and paste it into the *checkpoint* field in the `buildModel` cell. 
+
+
+---
+
+**How can I find out more about H2O's real-time, nano-fast scoring engine?** 
+
+H2O's scoring engine uses a Plain Old Java Object (POJO). The POJO code runs quickly but is single-threaded.  It is intended for embedding into lightweight real-time environments.
+
+All the work is done by the call to the appropriate predict method.  There is no involvement from H2O in this case.
+
+To compare multiple models simultaneously, use the POJO to call the models using multiple threads. For more information on using POJOs, refer to the [POJO Quick Start Guide](http://h2o-release.s3.amazonaws.com/h2o/master/3167/docs-website/h2o-docs/index.html#POJO%20Quick%20Start) and [POJO Java Documentation](http://h2o-release.s3.amazonaws.com/h2o/master/3167/docs-website/h2o-genmodel/javadoc/index.html)
+
+In-H2O scoring is triggered on an existing H2O cluster, typically using a REST API call. H2O evaluates the predictions in a parallel and distributed fashion for this case.  The predictions are stored into a new Frame and can be written out using `h2o.exportFile()`, for example.
+
+---
+
+**I am using an older version of H2O (2.8 or prior) - where can I find documentation for this version?**
+
+If you are using H2O 2.8 or prior, we strongly recommend <a href="http://h2o.ai/download/" target="_blank">upgrading to the latest version of H2O</a> if possible. 
+
+If you do not wish to upgrade to the latest version, documentation for H2O Classic is available [here](http://docs.h2o.ai/h2oclassic/index.html). 
+
+---
+
+**I am writing an academic research paper and I would like to cite H2O in my bibliography - how should I do that?**
+
+To cite our software: 
+
+- The H2O.ai Team. (2015) *h2o: R Interface for H2O*. R package version 3.1.0.99999. http://www.h2o.ai. 
+
+- The H2O.ai Team. (2015) *h2o: h2o: Python Interface for H2O*. Python package version 3.1.0.99999. http://www.h2o.ai. 
+
+- - The H2O.ai Team. (2015) *H2O: Scalable Machine Learning*. Version 3.1.0.99999. http://www.h2o.ai. 
+
+
+To cite one of our booklets: 
+
+-  Nykodym, T., Hussami, N., Kraljevic, T.,Rao, A., and Wang, A. (Sept. 2015). *Generalized Linear Modeling with H2O.* http://h2o.ai/resources.
+
+- Candel, A., LeDell, E., Parmar, V., and Arora, A. (Sept. 2015). *Deep Learning with H2O.* http://h2o.ai/resources.
+
+- Click, C.,  Malohlava, M., Parmar, V., and Roark, H. (Sept. 2015). *Gradient Boosted Models with H2O.* http://h2o.ai/resources.
+
+- Aiello, S., Eckstrand, E., Fu, A., Landry, M., and Aboyoun, P. (Sept. 2015) *Fast Scalable R with H2O.* http://h2o.ai/resources.
+
+- Aiello, S., Click, C., Roark, H. and Rehak, L. (Sept. 2015) *Machine Learning with Python and H2O* http://h2o.ai/resources. 
+
+- Malohlava, M., and Tellez, A. (Sept. 2015) *Machine Learning with Sparkling Water: H2O + Spark*  http://h2o.ai/resources. 
+
+
+If you are using Bibtex: 
+
+```
+
+@Manual{h2o_GLM_booklet,
+    title = {Generalized Linear Modeling with H2O},
+    author = {Nykodym, T. and Hussami, N. and Kraljevic, T. and Rao, A. and Wang, A.},
+    year = {2015},
+    month = {September},
+    url = {http://h2o.ai/resources},
+}
+
+@Manual{h2o_DL_booklet,
+    title = {Deep Learning with H2O},
+    author = {Candel, A. and LeDell, E. and Arora, A. and Parmar, V.},
+    year = {2015},
+    month = {September},
+    url = {http://h2o.ai/resources},
+}
+
+@Manual{h2o_GBM_booklet,
+    title = {Gradient Boosted Models},
+    author = {Click, C. and Lanford, J. and Malohlava, M. and Parmar, V. and Roark, H.},
+    year = {2015},
+    month = {September},
+    url = {http://h2o.ai/resources},
+}
+
+@Manual{h2o_R_booklet,
+    title = {Fast Scalable R with H2O},
+    author = {Aiello, S. and Eckstrand, E. and Fu, A. and Landry, M. and Aboyoun, P. },
+    year = {2015},
+    month = {September},
+    url = {http://h2o.ai/resources},
+}
+
+@Manual{h2o_R_package,
+    title = {h2o: R Interface for H2O},
+    author = {The H2O.ai team},
+    year = {2015},
+    note = {R package version 3.1.0.99999},
+    url = {http://www.h2o.ai},
+}
+
+
+@Manual{h2o_Python_module,
+    title = {h2o: Python Interface for H2O},
+    author = {The H2O.ai team},
+    year = {2015},
+    note = {Python package version 3.1.0.99999},
+    url = {http://www.h2o.ai},
+}
+
+
+@Manual{h2o_Java_software,
+    title = {H2O: Scalable Machine Learning},
+    author = {The H2O.ai team},
+    year = {2015},
+    note = {version 3.1.0.99999},
+    url = {http://www.h2o.ai},
+}
+
+```
+
+---
+
+**How can I use Flow to export the prediction results with a dataset?**
+
+After obtaining your results, click the **Combine predictions with frame** button, then click the **View Frame** button. 
+
+
+
+---
+
 ##Hadoop
 
-<!---
->commenting out as in progress per Michal
+
 **Why did I get an error in R when I tried to save my model to my home directory in Hadoop?**
 
 To save the model in HDFS, prepend the save directory with `hdfs://`:
@@ -478,11 +757,19 @@ h2o.saveModel(model, dir = model_path, name = “mymodel")
 ```
 
 ---
--->
 
 **How do I specify which nodes should run H2O in a Hadoop cluster?**
 
-Currently, this is not yet supported. To provide resource isolation (for example, to isolate H2O to the worker nodes, rather than the master nodes), use YARN Nodemanagers to specify the nodes to use. 
+After creating and applying the desired node labels and associating them with specific queues as described in the [Hadoop documentation](http://docs.hortonworks.com/HDPDocuments/HDP2/HDP-2.2.0/YARN_RM_v22/node_labels/index.html#Item1.1), launch H2O using the following command: 
+
+`hadoop jar h2odriver.jar -Dmapreduce.job.queuename=<my-h2o-queue> -nodes <num-nodes> -mapperXmx 6g -output hdfsOutputDirName`
+
+
+- `-Dmapreduce.job.queuename=<my-h2o-queue>` represents the queue name
+- `-nodes <num-nodes>` represents the number of nodes
+- `-mapperXmx 6g` launches H2O with 6g of memory
+- `-output hdfsOutputDirName` specifies the HDFS output directory as `hdfsOutputDirName`
+
 
 ---
 
@@ -491,16 +778,15 @@ Currently, this is not yet supported. To provide resource isolation (for example
 To import from HDFS in R: 
 
 ```
-h2o.importHDFS(path, conn = h2o.getConnection(), pattern = "",
-destination_frame = "", parse = TRUE, header = NA, sep = "",
-col.names = NULL, na.strings = NULL)
+h2o.importHDFS(path, pattern = "", destination_frame = "", parse = TRUE,
+header = NA, sep = "", col.names = NULL, na.strings = NULL)
 ```
 
 Here is another example: 
 
 ```
 # pathToAirlines <- "hdfs://mr-0xd6.0xdata.loc/datasets/airlines_all.csv"
-# airlines.hex <- h2o.importFile(conn = h, path = pathToAirlines, destination_frame = "airlines.hex")
+# airlines.hex <- h2o.importFile(path = pathToAirlines, destination_frame = "airlines.hex")
 ```
 
 
@@ -521,12 +807,6 @@ Error saving notebook: Error calling POST /3/NodePersistentStorage/notebook/Test
 When you are running H2O on Hadoop, H2O tries to determine the home HDFS directory so it can use that as the download location. If the default home HDFS directory is not found, manually set the download location from the command line using the `-flow_dir` parameter (for example, `hadoop jar h2odriver.jar <...> -flow_dir hdfs:///user/yourname/yourflowdir`). You can view the default download directory in the logs by clicking **Admin > View logs...** and looking for the line that begins `Flow dir:`.
 
 ---
-
-
-
-
-
-
 
 ##Java
 
@@ -601,6 +881,52 @@ EOF
 
 ##Python
 
+**I tried to install H2O in Python but `pip install scikit-learn` failed - what should I do?**
+
+Use the following commands (prepending with `sudo` if necessary): 
+
+```
+easy_install pip
+pip install numpy
+brew install gcc
+pip install scipy
+pip install scikit-learn
+```
+
+If you are still encountering errors and you are using OSX, the default version of Python may be installed. We recommend installing the Homebrew version of Python instead: 
+
+```
+brew install python
+```
+
+If you are encountering errors related to missing Python packages when using H2O, refer to the following list for a complete list of all Python packages, including dependencies: 
+
+<table>
+    <tr>
+        <td><code>grip</code></td>
+        <td><code>tabulate</code></td>
+        <td><code>wheel</code></td>
+        <td><code>jsonlite</code></td>
+        <td><code>ipython</code></td>
+    </tr>
+    <tr>
+        <td><code>numpy</code></td>
+        <td><code>scipy</code></td>
+        <td><code>pandas</code></td>
+        <td><code>-U gensim</code></td>
+        <td><code>jupyter</code></td>
+    </tr>
+    <tr>
+        <td><code>-U PIL</code></td>
+        <td><code>nltk</code></td>
+        <td><code>beautifulsoup4</code></td>
+        <td><code></code></td>
+        <td><code></code></td>
+   </tr>
+</table>
+
+---
+
 **How do I specify a value as an enum in Python? Is there a Python equivalent of `as.factor()` in R?**
 
 Use `.asfactor()` to specify a value as an enum. 
@@ -623,7 +949,7 @@ Downloading/unpacking http://h2o-release.s3.amazonaws.com/h2o/rel-shannon/12/Pyt
 
 IOError: [Errno 2] No such file or directory: '/tmp/pip-nTu3HK-build/setup.py' 
 
----------------------------------------- 
+--- 
 Command python setup.py egg_info failed with error code 1 in /tmp/pip-nTu3HK-build
 ```
 
@@ -693,17 +1019,177 @@ After completing this procedure, go to Python and use `h2o.init()` to start H2O 
 Refer to the following example: 
 
 ```
-fraw = h2o.import_file("smalldata/logreg/prostate.csv") 
+#Let's say you want to change the second column "CAPSULE" of prostate.csv
+#to categorical. You have 3 options.
+
+#Option 1. Use a dictionary of column names to types. 
+fr = h2o.import_file("smalldata/logreg/prostate.csv", col_types = {"CAPSULE":"Enum"})
+fr.describe()
+
+#Option 2. Use a list of column types.
+c_types = [None]*9
+c_types[1] = "Enum"
+fr = h2o.import_file("smalldata/logreg/prostate.csv", col_types = c_types)
+fr.describe()
+
+#Option 3. Use parse_setup().
+fraw = h2o.import_file("smalldata/logreg/prostate.csv", parse = False)
 fsetup = h2o.parse_setup(fraw) 
-fsetup["column_types"][1] = "Enum" # change second column "CAPSULE" to categorical 
+fsetup["column_types"][1] = '"Enum"'
 fr = h2o.parse_raw(fsetup) 
 fr.describe()
 ```
 
+---
+
+**How do I view a list of variable importances in Python?**
+
+Use `model.varimp(return_list=True)` as shown in the following example:
+
+```
+model = h2o.gbm(y = "IsDepDelayed", x = ["Month"], training_frame = df)
+vi = model.varimp(return_list=True)
+Out[26]:
+[(u'Month', 69.27436828613281, 1.0, 1.0)]
+```
 
 ---
 
+**What is PySparkling? How can I use it for grid search or early stopping?**
+
+PySparkling basically calls H2O Python functions for all operations on H2O data frames. You can perform all H2O Python operations available in H2O Python version 3.6.0.3 or later from PySparkling. 
+
+For help on a function within IPython Notebook, run `H2OGridSearch?`
+
+Here is an example of grid search in PySparkling: 
+
+```
+from h2o.grid.grid_search import H2OGridSearch
+from h2o.estimators.gbm import H2OGradientBoostingEstimator
+
+iris = h2o.import_file("/Users/nidhimehta/h2o-dev/smalldata/iris/iris.csv")
+
+ntrees_opt = [5, 10, 15]
+max_depth_opt = [2, 3, 4]
+learn_rate_opt = [0.1, 0.2]
+hyper_parameters = {"ntrees": ntrees_opt, "max_depth":max_depth_opt,
+          "learn_rate":learn_rate_opt}
+
+gs = H2OGridSearch(H2OGradientBoostingEstimator(distribution='multinomial'), hyper_parameters)
+gs.train(x=range(0,iris.ncol-1), y=iris.ncol-1, training_frame=iris, nfold=10)
+
+#gs.show
+print gs.sort_by('logloss', increasing=True)
+```
+
+Here is an example of early stopping in PySparkling:
+
+```
+from h2o.grid.grid_search import H2OGridSearch
+from h2o.estimators.deeplearning import H2ODeepLearningEstimator
+
+hidden_opt = [[32,32],[32,16,8],[100]]
+l1_opt = [1e-4,1e-3]
+hyper_parameters = {"hidden":hidden_opt, "l1":l1_opt}
+
+model_grid = H2OGridSearch(H2ODeepLearningEstimator, hyper_params=hyper_parameters)
+model_grid.train(x=x, y=y, distribution="multinomial", epochs=1000, training_frame=train,
+   validation_frame=test, score_interval=2, stopping_rounds=3, stopping_tolerance=0.05, stopping_metric="misclassification")
+```
+
+---
+
+**Do you have a tutorial for grid search in Python?**
+
+Yes, a notebook is available [here](https://github.com/h2oai/h2o-3/blob/master/h2o-py/demos/H2O_tutorial_eeg_eyestate.ipynb) that demonstrates the use of grid search in Python. 
+
+
+
+---
+
+
 ##R
+
+**Which versions of R are compatible with H2O?**
+
+Currently, the only version of R that is known to not work well with H2O is R version 3.1.0 (codename "Spring Dance"). If you are using this version, we recommend upgrading the R version before using H2O. 
+
+
+
+---
+
+**What R packages are required to use H2O?**
+
+The following packages are required: 
+
+- `methods`
+- `statmod`
+- `stats`
+- `graphics`
+- `RCurl`
+- `jsonlite`
+- `tools`
+- `utils`
+
+Some of these packages have dependencies; for example, `bitops` is required, but it is a dependency of the `RCurl` package, so `bitops` is automatically included when `RCurl` is installed. 
+
+If you are encountering errors related to missing R packages when using H2O, refer to the following list for a complete list of all R packages, including dependencies: 
+
+
+
+<table>
+    <tr>
+        <td><code>statmod</code></td>
+        <td><code>bitops</code></td>
+        <td><code>RCurl</code></td>
+        <td><code>jsonlite</code></td>
+        <td><code>methods</code></td>
+    </tr>
+    <tr>
+        <td><code>stats</code></td>
+        <td><code>graphics</code></td>
+        <td><code>tools</code></td>
+        <td><code>utils</code></td>
+        <td><code>stringi</code></td>
+    </tr>
+    <tr>
+        <td><code>magrittr</code></td>
+        <td><code>colorspace</code></td>
+        <td><code>stringr</code></td>
+        <td><code>RColorBrewer</code></td>
+        <td><code>dichromat</code></td>
+    </tr>
+    <tr>
+        <td><code>munsell</code></td>
+        <td><code>labeling</code></td>
+        <td><code>plyr</code></td>
+        <td><code>digest</code></td>
+        <td><code>gtable</code></td>
+    </tr>
+    <tr>
+        <td><code>reshape2</code></td>
+        <td><code>scales</code></td>
+        <td><code>proto</code></td>
+        <td><code>ggplot2</code></td>
+        <td><code>h2oEnsemble</code></td>
+    </tr>
+    <tr>
+        <td><code>gtools</code></td>
+        <td><code>gdata</code></td>
+        <td><code>caTools</code></td>
+        <td><code>gplots</code></td>
+        <td><code>chron</code></td>
+    </tr>
+    <tr>
+        <td><code>ROCR</code></td>
+        <td><code>data.table</code></td>
+        <td><code>cvAUC</code></td>
+        <td></td>
+        <td></td>
+   </tr>
+</table>
+
+---
 
 **How can I install the H2O R package if I am having permissions problems?**
 
@@ -741,18 +1227,11 @@ Look for the following output to confirm the changes:
 **I received the following error message after launching H2O in RStudio and using `h2o.init` - what should I do to resolve this error?**
 
 ```
-> localH2O = h2o.init()
-Successfully connected to http://127.0.0.1:54321/
- 
-ERROR: Unexpected HTTP Status code: 301 Moved Permanently (url = http://127.0.0.
-1:54321/3/Cloud?skip_ticks=true)
- 
-Error in fromJSON(rv$payload) : unexpected character '<'
-Calls: h2o.init ... gsub -> .h2o.doSafeGET -> .h2o.doSafeREST -> fromJSON
-Execution halted 
+Error in h2o.init() : 
+Version mismatch! H2O is running version 3.2.0.9 but R package is version 3.2.0.3
 ```
 
-This error is due to a version mismatch between the H2O package and the running H2O instance. Make sure you are using the latest version of both files by downloading H2O from the [downloads page](http://h2o.ai/download/) and installing the latest version and that you have removed any previous H2O R package versions by running: 
+This error is due to a version mismatch between the H2O R package and the running H2O instance. Make sure you are using the latest version of both files by downloading H2O from the [downloads page](http://h2o.ai/download/) and installing the latest version and that you have removed any previous H2O R package versions by running: 
 
 ```
 if ("package:h2o" %in% search()) { detach("package:h2o", unload=TRUE) }
@@ -767,7 +1246,7 @@ if (! ("statmod" %in% rownames(installed.packages()))) { install.packages("statm
 if (! ("stats" %in% rownames(installed.packages()))) { install.packages("stats") }
 if (! ("graphics" %in% rownames(installed.packages()))) { install.packages("graphics") }
 if (! ("RCurl" %in% rownames(installed.packages()))) { install.packages("RCurl") }
-if (! ("rjson" %in% rownames(installed.packages()))) { install.packages("rjson") }
+if (! ("jsonlite" %in% rownames(installed.packages()))) { install.packages("jsonlite") }
 if (! ("tools" %in% rownames(installed.packages()))) { install.packages("tools") }
 if (! ("utils" %in% rownames(installed.packages()))) { install.packages("utils") }
 ```
@@ -778,8 +1257,10 @@ Finally, install the latest version of the H2O package for R:
 ```
 install.packages("h2o", type="source", repos=(c("http://h2o-release.s3.amazonaws.com/h2o/master/{{build_number}}/R")))
 library(h2o)
-localH2O = h2o.init()
+localH2O = h2o.init(nthreads=-1)
 ```
+
+If your R version is older than the H2O R package, upgrade your R version using `update.packages(checkBuilt=TRUE, ask=FALSE)`. 
 
 ---
 
@@ -844,7 +1325,7 @@ Launch H2O and use your web browser to access the web UI, Flow, at `localhost:54
 ```
 library(h2o)
 localH2O = h2o.init(ip="sri.h2o.ai", port=54321, startH2O = F, strict_version_check=T)
-data_frame <- h2o.getFrame(frame_id = "YOUR_FRAME_ID",conn = localH2O)
+data_frame <- h2o.getFrame(frame_id = "YOUR_FRAME_ID")
 ``` 
 ---
 
@@ -874,7 +1355,7 @@ Use `na.omit(myFrame)`, where `myFrame` represents the name of the frame you are
 
 ---
 
-**I installed H2O in R using OS X and updated all the dependencies, but the following error message displayed: `Error in .h2o.doSafeREST(conn = conn, h2oRestApiVersion = h2oRestApiVersion, Unexpected CURL error: Empty reply from server` - what should I do?**
+**I installed H2O in R using OS X and updated all the dependencies, but the following error message displayed: `Error in .h2o.doSafeREST(h2oRestApiVersion = h2oRestApiVersion, Unexpected CURL error: Empty reply from server` - what should I do?**
 
 
 This error message displays if the `JAVA_HOME` environment variable is not set correctly. The `JAVA_HOME` variable is likely points to Apple Java version 6 instead of Oracle Java version 8. 
@@ -910,9 +1391,114 @@ EOF
 
 ---
 
+<!---
 
+in progress - commenting out until complete
+
+**How do I extract the variable importance from the output in R?**
+
+Launch R, then enter the following: 
+
+```
+library(h2o)
+h <- h2o.init()
+as.h2o(iris)
+as.h2o(testing)
+m <- h2o.gbm(x=1:4, y=5, data=hex, importance=T)
+
+m@model$varimp
+             Relative importance Scaled.Values Percent.Influence
+Petal.Width          7.216290000  1.0000000000       51.22833426
+Petal.Length         6.851120500  0.9493965043       48.63600147
+Sepal.Length         0.013625654  0.0018881799        0.09672831
+Sepal.Width          0.005484723  0.0007600474        0.03893596
+```
+
+The variable importances are returned as an R data frame and you can extract the names and values of the data frame as follows:
+
+```
+is.data.frame(m@model$varimp)
+# [1] TRUE
+
+names(m@model$varimp)
+# [1] "Relative importance" "Scaled.Values"       "Percent.Influence"  
+
+rownames(m@model$varimp)
+# [1] "Petal.Width"  "Petal.Length" "Sepal.Length" "Sepal.Width"
+
+m@model$varimp$"Relative importance"
+# [1] 7.216290000 6.851120500 0.013625654 0.005484723
+```
+
+-->
+
+
+---
+
+**How does the `col.names` argument work in `group_by`?**
+
+You need to add the `col.names` inside the `gb.control` list. Refer to the following example:
+
+```
+newframe <- h2o.group_by(dd, by="footwear_category", nrow("email_event_click_ct"), sum("email_event_click_ct"), mean("email_event_click_ct"),
+    sd("email_event_click_ct"), gb.control = list( col.names=c("count", "total_email_event_click_ct", "avg_email_event_click_ct", "std_email_event_click_ct") ) )
+newframe$avg_email_event_click_ct2 = newframe$total_email_event_click_ct / newframe$count
+```
+
+---
+
+**How are the results of `h2o.predict` displayed?**
+
+
+The order of the rows in the results for `h2o.predict` is the same as the order in which the data was loaded, even if some rows fail (for example, due to missing values or unseen factor levels). To bind a per-row identifier, use `cbind`. 
+
+---
+
+**How do I view all the variable importances for a model?**
+
+By default, H2O returns the top five and lowest five variable importances. 
+To view all the variable importances, use the following: 
+
+```
+model <- h2o.getModel(model_id = "my_H2O_modelID",conn=localH2O)
+
+varimp<-as.data.frame(h2o.varimp(model))
+```
+
+
+---
+
+**How do I add random noise to a column in an H2O frame?**
+
+To add random noise to a column in an H2O frame, refer to the following example: 
+
+```
+h2o.init()
+
+fr <- as.h2o(iris)
+
+  |======================================================================| 100%
+
+random_column <- h2o.runif(fr)
+
+new_fr <- h2o.cbind(fr,random_column)
+
+new_fr
+```
+
+---
 
 ##Sparkling Water
+
+**What are the advantages of using Sparkling Water compared with H2O?**
+
+Sparkling Water contains the same features and functionality as H2O but provides a way to use H2O with [Spark](http://spark.apache.org/), a large-scale cluster framework. 
+
+Sparkling Water is ideal for H2O users who need to manage large clusters for their data processing needs and want to transfer data from Spark to H2O (or vice versa). 
+
+There is also a Python interface available to enable access to Sparkling Water directly from PySpark. 
+
+--- 
 
 **How do I filter an H2OFrame using Sparkling Water?**
 
@@ -925,6 +1511,50 @@ Filtering rows is a little bit harder. There are two ways:
   or 
   
 - Create a new frame with the filtered rows. This is a harder task, since you have to copy data. For reference, look at the #deepSlice call on Frame (`H2OFrame`)
+
+
+---
+
+**How can I save and load a K-means model using Sparkling Water?**
+
+
+The following example code defines the save and load functions explicitly. 
+
+```
+import water._
+import _root_.hex._
+import java.net.URI
+import water.serial.ObjectTreeBinarySerializer
+// Save H2O model (as binary)
+def exportH2OModel(model : Model[_,_,_], destination: URI): URI = {
+  val modelKey = model._key.asInstanceOf[Key[_ <: Keyed[_ <: Keyed[_ <: AnyRef]]]]
+  val keysToExport = model.getPublishedKeys()
+  // Prepend model key
+  keysToExport.add(0, modelKey)
+
+  new ObjectTreeBinarySerializer().save(keysToExport, destination)
+  destination
+}
+
+// Get model from H2O DKV and Save to disk
+val gbmModel: _root_.hex.tree.gbm.GBMModel = DKV.getGet("model")
+exportH2OModel(gbmModel, new File("../h2omodel.bin").toURI)
+
+
+
+def loadH2OModel[M <: Model[_, _, _]](source: URI) : M = {
+    val l = new ObjectTreeBinarySerializer().load(source)
+    l.get(0).get().asInstanceOf[M]
+  }
+// Load H2O model
+def loadH2OModel[M <: Model[_, _, _]](source: URI) : M = {
+    val l = new ObjectTreeBinarySerializer().load(source)
+    l.get(0).get().asInstanceOf[M]
+  }
+  
+// Load model
+val h2oModel: Model[_, _, _] = loadH2OModel(new File("../h2omodel.bin").toURI)
+```
 
 
 ---
@@ -1071,20 +1701,6 @@ import org.apache.spark.h2o._
 val h2oContext = new H2OContext(sc)
 ```
 After setting up `H2OContext`, try to run Sparkling Water again. 
-
----
-
-
-
-
-
----
-
-##Tableau
-
-**Where can I learn more about running H2O with Tableau?**
-
-For more information about using H2O with Tableau, refer to [this link](http://learn.h2o.ai/content/demos/integration_with_tableau_and_excel.html) and our [demo](https://github.com/h2oai/h2o-3/blob/master/h2o-r/tests/testdir_demos/runit_demo_tableau.R) in our GitHub repository. Other demos are available [here](https://s3-us-west-1.amazonaws.com/testing-amy/Demo_Template_9.0Windows.twb) and [here](https://github.com/h2oai/h2o/blob/master/tableau/meta_data/airlines_meta.csv). 
 
 ---
 

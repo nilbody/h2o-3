@@ -1,63 +1,72 @@
-import os, sys
-sys.path.insert(1,"../../../")
+from builtins import range
+import sys, os
+sys.path.insert(1, os.path.join("..","..",".."))
 import h2o
+from tests import pyunit_utils
 
-def deeplearning_autoencoder(ip, port):
-    h2o.init(ip, port)
 
-    resp = 784
-    nfeatures = 20 # number of features (smallest hidden layer)
+from h2o.estimators.deeplearning import H2OAutoEncoderEstimator
+from h2o.estimators.random_forest import H2ORandomForestEstimator
 
-    train_hex = h2o.upload_file(h2o.locate("bigdata/laptop/mnist/train.csv.gz"))
-    train_hex[resp] = train_hex[resp].asfactor()
 
-    test_hex = h2o.upload_file(h2o.locate("bigdata/laptop/mnist/test.csv.gz"))
-    test_hex[resp] = test_hex[resp].asfactor()
+def deeplearning_autoencoder():
 
-    # split data into two parts
-    sid = train_hex[0].runif(1234)
+  resp = 784
+  nfeatures = 20  # number of features (smallest hidden layer)
 
-    # unsupervised data for autoencoder
-    train_unsupervised = train_hex[sid >= 0.5]
-    train_unsupervised.drop(resp)
-    train_unsupervised.describe()
+  train_hex = h2o.upload_file(pyunit_utils.locate("bigdata/laptop/mnist/train.csv.gz"))
+  train_hex[resp] = train_hex[resp].asfactor()
 
-    # supervised data for drf
-    train_supervised = train_hex[sid < 0.5]
-    train_supervised.describe()
+  test_hex = h2o.upload_file(pyunit_utils.locate("bigdata/laptop/mnist/test.csv.gz"))
+  test_hex[resp] = test_hex[resp].asfactor()
 
-    # train autoencoder
-    ae_model = h2o.deeplearning(x=train_unsupervised[0:resp],
-                                activation="Tanh",
-                                autoencoder=True,
-                                hidden=[nfeatures],
-                                epochs=1,
-                                reproducible=True, #slow, turn off for real problems
-                                seed=1234)
+  # split data into two parts
+  sid = train_hex[0].runif(0)
 
-    # conver train_supervised with autoencoder to lower-dimensional space
-    train_supervised_features = ae_model.deepfeatures(train_supervised[0:resp]._frame(), 0)
+  # unsupervised data for autoencoder
+  train_unsupervised = train_hex[sid >= 0.5]
+  train_unsupervised.pop(resp)
+  #train_unsupervised.describe()
 
-    assert train_supervised_features.ncol() == nfeatures, "Dimensionality of reconstruction is wrong!"
 
-    # Train DRF on extracted feature space
-    drf_model = h2o.random_forest(x=train_supervised_features[0:20],
-                                  y=train_supervised[resp],
-                                  ntrees=10,
-                                  min_rows=10,
-                                  seed=1234)
+  # supervised data for drf
+  train_supervised = train_hex[sid < 0.5]
+  #train_supervised.describe()
 
-    # Test the DRF model on the test set (processed through deep features)
-    test_features = ae_model.deepfeatures(test_hex[0:resp]._frame(), 0)
-    test_features = test_features.cbind(test_hex[resp])._frame()
+  # train autoencoder
+  ae_model = H2OAutoEncoderEstimator(activation="Tanh",
+                                     hidden=[nfeatures],
+                                     epochs=1,
+                                     reproducible=True,
+                                     seed=1234)
 
-    # Confusion Matrix and assertion
-    cm = drf_model.confusion_matrix(test_features)
-    cm.show()
+  ae_model.train(list(range(resp)), training_frame=train_unsupervised)
 
-    # 10% error +/- 0.001
-    assert abs(cm.cell_values[10][10] - 0.1078) < 0.001, "Error. Expected 0.1078, but got {0}".format(cm.cell_values[10][10])
+  # convert train_supervised with autoencoder to lower-dimensional space
+  train_supervised_features = ae_model.deepfeatures(train_supervised[0:resp], 0)
 
-if __name__ == '__main__':
-    h2o.run_test(sys.argv, deeplearning_autoencoder)
+  assert train_supervised_features.ncol == nfeatures, "Dimensionality of reconstruction is wrong!"
 
+  train_supervised_features = train_supervised_features.cbind(train_supervised[resp])
+
+  # Train DRF on extracted feature space
+  drf_model = H2ORandomForestEstimator(ntrees=10, min_rows=10, seed=1234)
+  drf_model.train(x=list(range(20)), y=train_supervised_features.ncol-1, training_frame=train_supervised_features)
+
+  # Test the DRF model on the test set (processed through deep features)
+  test_features = ae_model.deepfeatures(test_hex[0:resp], 0)
+  test_features = test_features.cbind(test_hex[resp])
+
+  # Confusion Matrix and assertion
+  cm = drf_model.confusion_matrix(test_features)
+  cm.show()
+
+  # 8.8% error +/- 0.001
+  #compare to runit_deeplearning_autoencoder_large.py
+  assert abs(cm.cell_values[10][10] - 0.0880) < 0.001, "Error. Expected 0.0880, but got {0}".format(cm.cell_values[10][10])
+
+
+if __name__ == "__main__":
+    pyunit_utils.standalone_test(deeplearning_autoencoder)
+else:
+    deeplearning_autoencoder()

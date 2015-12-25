@@ -1,7 +1,9 @@
 setwd(normalizePath(dirname(R.utils::commandArgs(asValues=TRUE)$"f")))
-source('../h2o-runit.R')
+source("../../scripts/h2o-r-test-setup.R")
 
-test.mergecat <- function(conn) {
+
+
+test.mergecat <- function() {
   census_path <- locate("smalldata/chicago/chicagoCensus.csv")
   crimes_path <- locate("smalldata/chicago/chicagoCrimes10k.csv.zip")
   
@@ -22,10 +24,10 @@ test.mergecat <- function(conn) {
   
   Log.info("Merge crimes and census data on community area number")
   names(census)[names(census) == "Community.Area.Number"] <- "Community.Area"
-  crimeMerge <- h2o.merge(crimes, census)
+  crimeMerge <- h2o.merge(crimes, census, all.x=TRUE)
   print(summary(crimeMerge))
   
-  testEnd()
+  
 }
 
-doTest("Merging H2O Frames that contain categorical columns", test.mergecat)
+doTest("Merging H2O H2OFrames that contain categorical columns", test.mergecat)

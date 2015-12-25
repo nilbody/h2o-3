@@ -1,23 +1,24 @@
+setwd(normalizePath(dirname(R.utils::commandArgs(asValues=TRUE)$"f")))
+source("../../scripts/h2o-r-test-setup.R")
 # Run speedRf. Get Mean Squared error from the model.
 # Predict on the same dataset and calculate Mean Squared error in R by pulling in the predictions
 
-setwd(normalizePath(dirname(R.utils::commandArgs(asValues=TRUE)$"f")))
-options(echo=TRUE)
-source('../h2o-runit.R')
 
-test.pub.651 <- function(conn) {
+options(echo=TRUE)
+
+
+test.pub.651 <- function() {
   print("Parsing the adult income dataset")
-  adlt_income<-h2o.importFile(conn, normalizePath(locate("smalldata/jira/adult.gz")),destination_frame="adlt_income")
+  adlt_income<-h2o.importFile(normalizePath(locate("smalldata/jira/adult.gz")),destination_frame="adlt_income")
   myX = 1:14
   myY = 15
 
-  print("Building SpeedRF model")
-  my.srf  = h2o.randomForest(x=myX,y=myY,training_frame=adlt_income,ntrees=50,
-                             oobee=F,validation=adlt_income)
-  print(paste(" The SpeedRF ran with this seed: ",my.srf@model$params$seed, sep = ''))
+  print("Building RF model")
+  my.srf  = h2o.randomForest(x=myX,y=myY,training_frame=adlt_income,ntrees=50, validation_frame=adlt_income)
+  print(paste(" The RF ran with this seed: ",my.srf@model$params$seed, sep = ''))
   print(my.srf)
 
-  mse_from_model = my.srf@model$mse
+  mse_from_model = h2o.mse(my.srf)
   print(paste("mean squared error from model page", mse_from_model, sep = ''))
 
   pred = h2o.predict(my.srf,adlt_income)
@@ -38,7 +39,7 @@ test.pub.651 <- function(conn) {
   print(paste("mean squared error as calculated from prediction file probabilities:  ", mse_calculatedfrom_predFile, sep = ' '))
   print("Expect the above two to be equal")
   expect_true( abs(mse_from_model - mse_calculatedfrom_predFile) < 1e-5 )
-  testEnd()
+  
 }
 
 doTest("PUB-651: Test Predictions on SRF", test.pub.651)

@@ -1,9 +1,11 @@
 setwd(normalizePath(dirname(R.utils::commandArgs(asValues=TRUE)$"f")))
-source('../../h2o-runit.R')
+source("../../../scripts/h2o-r-test-setup.R")
 
-test.pca.quasar <- function(conn) {
+
+
+test.pca.quasar <- function() {
   Log.info("Importing SDSS_quasar.txt.zip data...") 
-  quasar.hex <- h2o.importFile(conn, locate("smalldata/pca_test/SDSS_quasar.txt.zip"), header = TRUE)
+  quasar.hex <- h2o.importFile(locate("smalldata/pca_test/SDSS_quasar.txt.zip"), header = TRUE)
   quasar.hex <- quasar.hex[,-1]
   print(summary(quasar.hex))
   
@@ -19,7 +21,7 @@ test.pca.quasar <- function(conn) {
   Log.info(paste("Standard deviation with Power  :", paste(h2o.sdev(fitPower), collapse = " ")))
   Log.info(paste("Standard deviation with GLRM   :", paste(h2o.sdev(fitGLRM), collapse = " ")))
   Log.info(paste("GLRM final objective value:", fitGLRM@model$objective))
-  testEnd()
+  
 }
 
 doTest("PCA Test: SDSS Quasar with different methods", test.pca.quasar)

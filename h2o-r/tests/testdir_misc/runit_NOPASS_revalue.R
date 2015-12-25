@@ -1,13 +1,15 @@
+setwd(normalizePath(dirname(R.utils::commandArgs(asValues=TRUE)$"f")))
+source("../../scripts/h2o-r-test-setup.R")
 ##
 # Generate lots of keys then remove them
 ##
 
-setwd(normalizePath(dirname(R.utils::commandArgs(asValues=TRUE)$"f")))
-source('../h2o-runit.R')
 
-test <- function(conn) {
 
-  hex <- as.h2o(conn, iris)
+
+test <- function() {
+
+  hex <- as.h2o(iris)
 
   Log.info("Original factor column")
   print(hex$Species)
@@ -21,7 +23,7 @@ test <- function(conn) {
   vals <- c("NEW SETOSA ENUM", "NEW VIRG ENUM", "NEW VERSI ENUM")
   expect_equal(h2o.levels(hex$Species), vals)
 
-  testEnd()
+  
 }
 
 doTest("Many Keys Test: Removing", test)

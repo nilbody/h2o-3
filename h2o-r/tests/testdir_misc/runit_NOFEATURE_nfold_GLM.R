@@ -1,11 +1,13 @@
 setwd(normalizePath(dirname(R.utils::commandArgs(asValues=TRUE)$"f")))
-source('../h2o-runit.R')
+source("../../scripts/h2o-r-test-setup.R")
 
-test.h2o.nfold_GLM <- function(conn) {
+
+
+test.h2o.nfold_GLM <- function() {
   tolerance <- 1e-4
 
   conn = h2o.init()
-  hex <- h2o.importFile(conn, normalizePath(locate("smalldata/logreg/prostate.csv")))
+  hex <- h2o.importFile(normalizePath(locate("smalldata/logreg/prostate.csv")))
   predictors = c(3:9)
   response = 2
   NFOLDS = 4
@@ -30,7 +32,7 @@ test.h2o.nfold_GLM <- function(conn) {
   }
 
   # compare metrics
-  perf <- h2o.performance(as.h2o(conn,predictions), hex[,response])
+  perf <- h2o.performance(as.h2o(predictions), hex[,response])
   auc <- m@model$auc
   accuracy <- m@model$accuracy
   cm <- m@model$confusion
@@ -47,7 +49,7 @@ test.h2o.nfold_GLM <- function(conn) {
   perf@model$confusion
   if (max(abs(cm[1:9] - perf@model$confusion[1:9])) != 0) stop("cm is wrong")
 
-  testEnd()
+  
 }
 
 doTest("Test H2O N-Fold CV for GLM", test.h2o.nfold_GLM)

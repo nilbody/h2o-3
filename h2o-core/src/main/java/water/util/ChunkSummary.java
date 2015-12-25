@@ -3,13 +3,17 @@ package water.util;
 import water.H2O;
 import water.MRTask;
 import water.fvec.Chunk;
-import water.fvec.EnumWrappedVec;
+import water.fvec.CategoricalWrappedVec;
 import water.fvec.Vec;
 
 /**
  * Simple summary of how many chunks of each type are in a Frame
  */
 public class ChunkSummary extends MRTask<ChunkSummary> {
+
+  private final byte _priority; // Allow higher priority for GUI work
+  ChunkSummary() {  _priority = (Thread.currentThread() instanceof H2O.FJWThr) ? nextThrPriority() : H2O.GUI_PRIORITY - 2; }
+  @Override public byte priority() { return _priority; }
 
   // static list of chunks for which statistics are to be gathered
   final transient static String[] chunkTypes = new String[]{
@@ -30,6 +34,7 @@ public class ChunkSummary extends MRTask<ChunkSummary> {
     "C16",                      // UUID
     "CStr",                     // Strings
     "CXD",                      // Sparse doubles
+    "CUD",                      // Few Unique doubles
     "C8D",                      //leave this as last -> no compression
   };
   final transient static String[] chunkNames = new String[]{
@@ -50,6 +55,7 @@ public class ChunkSummary extends MRTask<ChunkSummary> {
           "128-bit UUID",
           "String",
           "Sparse Reals",
+          "Unique Reals",
           "64-bit Reals",
   };
 
@@ -92,8 +98,8 @@ public class ChunkSummary extends MRTask<ChunkSummary> {
       int nlen = cname.length();
       assert nlen > 5 && cname.charAt(nlen-5)=='C' && cname.charAt(nlen-1)=='k';
       String sname = cname.substring(0,nlen-5);
-      if (sname.equals("EnumWrapped")) {
-        Chunk ec = ((EnumWrappedVec.EnumWrappedChunk)c)._c;
+      if (sname.equals("CategoricalWrapped")) {
+        Chunk ec = ((CategoricalWrappedVec.CategoricalWrappedChunk)c)._c;
         cname = ec.getClass().getSimpleName();
         nlen = cname.length();
         assert nlen > 5 && cname.charAt(nlen-5)=='C' && cname.charAt(nlen-1)=='k';
@@ -129,7 +135,7 @@ public class ChunkSummary extends MRTask<ChunkSummary> {
   @Override
   protected void postGlobal() {
     if (chunk_counts == null || chunk_byte_sizes == null || byte_size_per_node == null) return;
-    assert(total_row_count == _fr.numRows());
+    assert(total_row_count == _fr.numRows()): "total_row_count["+total_row_count+"] != _fr.numRows()["+_fr.numRows()+"]. ";
 
     // compute counts and sizes
     total_chunk_byte_size = 0;
@@ -206,7 +212,7 @@ public class ChunkSummary extends MRTask<ChunkSummary> {
     rowHeaders[row++] = "min";
     rowHeaders[row++] = "max";
     rowHeaders[row++] = "stddev";
-    rowHeaders[row++] = "total";
+    rowHeaders[row  ] = "total";
     final String[] colHeaders = new String[]{"Size", "Number of Rows", "Number of Chunks per Column", "Number of Chunks"};
     final String[] colTypes = new String[]{"string", "float", "float", "float"};
     final String[] colFormats = new String[]{"%s", "%f", "%f", "%f"};
@@ -244,7 +250,7 @@ public class ChunkSummary extends MRTask<ChunkSummary> {
     table.set(row, 0, display(total_chunk_byte_size));
     table.set(row, 1, total_row_count);
     table.set(row, 2, total_chunk_count_per_col);
-    table.set(row++, 3, _fr.numCols()*total_chunk_count_per_col);
+    table.set(row, 3, _fr.numCols()*total_chunk_count_per_col);
 
     return table;
   }

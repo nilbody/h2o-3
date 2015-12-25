@@ -4,7 +4,6 @@ import water.AutoBuffer;
 import water.Freezable;
 import water.H2O;
 import water.Iced;
-import water.util.DocGen.HTML;
 
 import java.io.Serializable;
 import java.util.Collection;
@@ -55,16 +54,20 @@ public abstract class IcedHashMapBase<K, V> extends Iced implements Map<K, V>, C
       else { assert val instanceof Iced; mode = 4; }
     }
     ab.put1(mode);              // Type of hashmap being serialized
-    for( Entry<K, V> e : map().entrySet() ) {
-      key = e.getKey();   assert key != null;
-      val = e.getValue(); assert val != null;
-      if( mode==1 || mode ==2 ) ab.putStr((String)key); else ab.put((Iced)key);
-      if( mode==1 || mode ==3 ) ab.putStr((String)val); else ab.put((Iced)val);
-    }
+    writeMap(ab,mode);          // Do the hard work of writing the map
     return (mode==1 || mode==2) ? ab.putStr(null) : ab.put(null);
   }
 
   abstract protected Map<K,V> init();
+
+  protected void writeMap(AutoBuffer ab, int mode) {
+    for( Entry<K, V> e : map().entrySet() ) {
+      K key = e.getKey();   assert key != null;
+      V val = e.getValue(); assert val != null;
+      if( mode==1 || mode ==2 ) ab.putStr((String)key); else ab.put((Iced)key);
+      if( mode==1 || mode ==3 ) ab.putStr((String)val); else ab.put((Iced)val);
+    }
+  }
 
   /**
    * Helper for serialization - fills the mymap() from K-V pairs in the AutoBuffer object
@@ -113,5 +116,4 @@ public abstract class IcedHashMapBase<K, V> extends Iced implements Map<K, V>, C
     return ab;
   }
   @Override public IcedHashMapBase<K, V> readJSON_impl( AutoBuffer ab ) { throw H2O.fail(); }
-  @Override public HTML writeHTML_impl( HTML ab ) { throw H2O.fail(); }
 }

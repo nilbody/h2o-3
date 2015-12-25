@@ -1,7 +1,9 @@
 setwd(normalizePath(dirname(R.utils::commandArgs(asValues=TRUE)$"f")))
-source('../h2o-runit.R')
+source("../../scripts/h2o-r-test-setup.R")
 
-test.pubdev.1654 <- function(conn) {
+
+
+test.pubdev.1654 <- function() {
   k <- 5
   use_all_factor_levels <- FALSE
   
@@ -34,7 +36,7 @@ test.pubdev.1654 <- function(conn) {
   fitH2O <- h2o.prcomp(birds.hex, k = k, transform = "STANDARDIZE", max_iterations = 1000, use_all_factor_levels = use_all_factor_levels)
   checkPCAModel(fitH2O, fitR, tolerance = 1e-5, sort_rows = FALSE)
   
-  testEnd()
+  
 }
 
 doTest("PUBDEV-1654: PCA handling of Missing Values", test.pubdev.1654)

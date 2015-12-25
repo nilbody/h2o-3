@@ -12,13 +12,14 @@ import water.TestUtil;
  * Created by tomasnykodym on 3/28/14.
  */
 public class SparseTest extends TestUtil {
+  @BeforeClass() public static void setup() { stall_till_cloudsize(1); }
   private Chunk makeChunk(double [] vals, Futures fs) {
     int nzs = 0;
     int [] nonzeros = new int[vals.length];
     int j = 0;
     for(double d:vals)if(d != 0)nonzeros[nzs++] = j++;
     Key key = Vec.newKey();
-    AppendableVec av = new AppendableVec(key);
+    AppendableVec av = new AppendableVec(key, Vec.T_NUM);
     NewChunk nv = new NewChunk(av,0);
     for(double d:vals){
       if(Double.isNaN(d))nv.addNA();
@@ -26,7 +27,7 @@ public class SparseTest extends TestUtil {
       else nv.addNum(d);
     }
     nv.close(0,fs);
-    Vec vec = av.close(fs);
+    Vec vec = av.layout_and_close(fs);
     return vec.chunkForChunkIdx(0);
   }
 
@@ -96,7 +97,7 @@ public class SparseTest extends TestUtil {
   }
 
 
-  @Test public void testDouble() {runTest(new double [] {2.7182,3.14,42},Double.NaN,123.45,CXDChunk.class,CXDChunk.class,C8DChunk.class);}
+  @Test public void testDouble() {runTest(new double [] {2.7182,3.14,42},Double.NaN,123.45,CXDChunk.class,CXDChunk.class,CUDChunk.class);}
 
   @Test public void testBinary() {
     runTest(new double [] {1,1,1},1,1,CX0Chunk.class,CX0Chunk.class,CBSChunk.class);

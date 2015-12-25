@@ -54,6 +54,9 @@ py2/testdir_single_jvm/h2o_fc-nodes.json
 h2o-py/demos/.ipynb_checkpoints
 Rplots.pdf
 
+# Don't delete local R packages
+Rlibrary
+
 # Data folders
 bigdata/
 smalldata/
@@ -75,3 +78,9 @@ target
 ./h2o-py/docs/docs/py-modindex.html
 ./h2o-py/docs/docs/*html
 ./h2o-py/docs/docs/*js
+./h2o-py/docs/docs/.buildinfo
+./h2o-py/docs/docs/.doctrees/
+./h2o-py/docs/docs/_modules/
+./h2o-py/docs/docs/objects.inv
+
+git_private_jenkins.sh

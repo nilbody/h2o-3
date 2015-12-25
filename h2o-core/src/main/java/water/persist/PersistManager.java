@@ -9,6 +9,7 @@ import water.util.Log;
 import water.persist.Persist.PersistEntry;
 
 import java.io.*;
+import java.net.HttpURLConnection;
 import java.net.URI;
 import java.net.URL;
 import java.util.ArrayList;
@@ -127,7 +128,7 @@ public class PersistManager {
     }
   }
 
-  public void store(int backend, Value v) {
+  public void store(int backend, Value v) throws IOException {
     stats[backend].store_count.incrementAndGet();
     I[backend].store(v);
   }
@@ -176,6 +177,18 @@ public class PersistManager {
     return ikey;
   }
 
+  private static boolean httpUrlExists(String URLName){
+    try {
+      HttpURLConnection con = (HttpURLConnection) new URL(URLName).openConnection();
+      con.setInstanceFollowRedirects(false);
+      con.setRequestMethod("HEAD");
+      return (con.getResponseCode() == HttpURLConnection.HTTP_OK);
+    }
+    catch (Exception e) {
+      return false;
+    }
+  }
+
   /**
    * Calculate typeahead matches for src
    *
@@ -185,8 +198,18 @@ public class PersistManager {
    */
   public ArrayList<String> calcTypeaheadMatches(String filter, int limit) {
     String s = filter.toLowerCase();
-    if (s.startsWith("hdfs:") || s.startsWith("s3:") || s.startsWith("s3n:")
-                          || s.startsWith("s3a:") || s.startsWith("maprfs:")) {
+    if (s.startsWith("http:") || s.startsWith("https:")) {
+      if (httpUrlExists(filter)) {
+        ArrayList<String> arrayList = new ArrayList<>();
+        arrayList.add(filter);
+        return arrayList;
+      }
+      else {
+        return new ArrayList<>();
+      }
+    }
+    else if (s.startsWith("hdfs:") || s.startsWith("s3:") || s.startsWith("s3n:") ||
+             s.startsWith("s3a:") || s.startsWith("maprfs:")) {
       if (I[Value.HDFS] == null) {
         throw new H2OIllegalArgumentException("HDFS, S3, S3N, and S3A support is not configured");
       }
@@ -373,10 +396,7 @@ public class PersistManager {
           throw new IllegalArgumentException("File already exists (" + path + ")");
         }
       }
-
-      FileOutputStream fos;
-      fos = new FileOutputStream(path);
-      return fos;
+      return new FileOutputStream(path);
     }
     catch (Exception e) {
       throw new RuntimeException(e);

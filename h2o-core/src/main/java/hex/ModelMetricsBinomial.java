@@ -2,17 +2,20 @@ package hex;
 
 import water.exceptions.H2OIllegalArgumentException;
 import water.fvec.Frame;
+import water.fvec.Vec;
 import water.util.ArrayUtils;
 import water.util.MathUtils;
 
 public class ModelMetricsBinomial extends ModelMetricsSupervised {
   public final AUC2 _auc;
   public final double _logloss;
+  public final GainsLift _gainsLift;
 
-  public ModelMetricsBinomial(Model model, Frame frame, double mse, String[] domain, double sigma, AUC2 auc, double logloss) {
+  public ModelMetricsBinomial(Model model, Frame frame, double mse, String[] domain, double sigma, AUC2 auc, double logloss, GainsLift gainsLift) {
     super(model, frame, mse, domain, sigma);
     _auc = auc;
     _logloss = logloss;
+    _gainsLift = gainsLift;
   }
 
   public static ModelMetricsBinomial getFromDKV(Model model, Frame frame) {
@@ -30,16 +33,32 @@ public class ModelMetricsBinomial extends ModelMetricsSupervised {
     if (_auc != null) sb.append(" AUC: " + (float)_auc._auc + "\n");
     sb.append(" logloss: " + (float)_logloss + "\n");
     if (cm() != null) sb.append(" CM: " + cm().toASCII());
+    if (_gainsLift != null) sb.append(_gainsLift);
     return sb.toString();
   }
 
   public double logloss() { return _logloss; }
-  @Override public AUC2 auc() { return _auc; }
+  @Override public AUC2 auc_obj() { return _auc; }
   @Override public ConfusionMatrix cm() {
     if( _auc == null ) return null;
     double[][] cm = _auc.defaultCM();
     return cm == null ? null : new ConfusionMatrix(cm, _domain);
   }
+  public GainsLift gainsLift() { return _gainsLift; }
+
+  // expose simple metrics criteria for sorting
+  public double auc() { return auc_obj()._auc; }
+  public double err() { return cm().err(); }
+  public double errCount() { return cm().errCount(); }
+  public double accuracy() {  return cm().accuracy(); }
+  public double specificity() { return cm().specificity(); }
+  public double recall() { return cm().recall(); }
+  public double precision() { return cm().precision(); }
+  public double mcc() { return cm().mcc(); }
+  public double max_per_class_error() { return cm().max_per_class_error(); }
+  public double F1() { return cm().F1(); }
+  public double F2() { return cm().F2(); }
+  public double F0point5() { return cm().F0point5(); }
 
 
   public static class MetricBuilderBinomial<T extends MetricBuilderBinomial<T>> extends MetricBuilderSupervised<T> {
@@ -81,7 +100,16 @@ public class ModelMetricsBinomial extends ModelMetricsSupervised {
       _auc.reduce(mb._auc);
     }
 
-    @Override public ModelMetrics makeModelMetrics( Model m, Frame f) {
+    /**
+     * Create a ModelMetrics for a given model and frame
+     * @param m Model
+     * @param f Frame
+     * @param frameWithWeights Frame that contains extra columns such as weights
+     * @param preds Optional predictions (can be null), only used to compute Gains/Lift table for binomial problems  @return
+     * @return
+     */
+    @Override public ModelMetrics makeModelMetrics(Model m, Frame f, Frame frameWithWeights, Frame preds) {
+      if (frameWithWeights ==null) frameWithWeights = f;
       double mse = Double.NaN;
       double logloss = Double.NaN;
       double sigma = Double.NaN;
@@ -90,12 +118,22 @@ public class ModelMetricsBinomial extends ModelMetricsSupervised {
         mse = _sumsqe / _wcount;
         logloss = _logloss / _wcount;
         AUC2 auc = new AUC2(_auc);
-        return m._output.addModelMetrics(new ModelMetricsBinomial(m, f, mse, _domain, sigma, auc,  logloss));
+        GainsLift gl = null;
+        if (preds!=null) {
+          Vec resp = f.vec(m._parms._response_column);
+          Vec weight = frameWithWeights.vec(m._parms._weights_column);
+          if (resp != null) {
+            gl = new GainsLift(preds.lastVec(), resp, weight);
+            gl.exec();
+          }
+        }
+        return m._output.addModelMetrics(new ModelMetricsBinomial(m, f, mse, _domain, sigma, auc,  logloss, gl));
       } else {
-        return m._output.addModelMetrics(new ModelMetricsBinomial(m, f, mse,   null,  sigma, null, logloss));
+        return m._output.addModelMetrics(new ModelMetricsBinomial(m, f, mse,   null,  sigma, null, logloss, null));
       }
     }
     public String toString(){
+      if(_wcount == 0) return "empty, no rows";
       return "auc = " + MathUtils.roundToNDigits(auc(),3) + ", logloss = " + _logloss / _wcount;
     }
   }

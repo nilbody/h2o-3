@@ -4,6 +4,7 @@ import hex.ModelCategory;
 import water.DKV;
 import water.Job;
 import water.H2O;
+import water.Scope;
 import water.fvec.Vec;
 import water.util.Log;
 
@@ -32,7 +33,7 @@ public class Word2Vec extends ModelBuilder<Word2VecModel,Word2VecModel.Word2VecP
   /** Start the KMeans training Job on an F/J thread.
    * @param work
    * @param restartTimer*/
-  @Override public Job<Word2VecModel> trainModelImpl(long work, boolean restartTimer) {
+  @Override protected Job<Word2VecModel> trainModelImpl(long work, boolean restartTimer) {
     return start(new Word2VecDriver(), work, restartTimer);
   }
 
@@ -64,6 +65,7 @@ public class Word2Vec extends ModelBuilder<Word2VecModel,Word2VecModel.Word2VecP
   }
 
   private class Word2VecDriver extends H2O.H2OCountedCompleter<Word2VecDriver> {
+    protected Word2VecDriver() { super(true); } // bump driver priority
     @Override
     protected void compute2() {
       Word2VecModel model = null;
@@ -72,6 +74,7 @@ public class Word2Vec extends ModelBuilder<Word2VecModel,Word2VecModel.Word2VecP
       float tDiff;
 
       try {
+        Scope.enter();
         _parms.read_lock_frames(Word2Vec.this);
         init(true);
 
@@ -111,6 +114,7 @@ public class Word2Vec extends ModelBuilder<Word2VecModel,Word2VecModel.Word2VecP
         updateModelOutput();
         if( model != null ) model.unlock(_key);
         _parms.read_unlock_frames(Word2Vec.this);
+        Scope.exit();
       }
       tryComplete();
     }

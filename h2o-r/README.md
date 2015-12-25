@@ -4,7 +4,9 @@
 
 ## Downloading
 
-We don't yet have a downloadable R artifact for the latest version of H2O. You will need to build it yourself.
+You can always download the latest stable version of the **h2o** R package from the following page: [http://h2o-release.s3.amazonaws.com/h2o/latest_stable.html](http://h2o-release.s3.amazonaws.com/h2o/latest_stable.html) 
+
+Alternatively, you can build the h2o R package from source (see below), or install the package from [CRAN](https://cran.r-project.org/web/packages/h2o/index.html).
 
 
 ## Building it yourself
@@ -55,7 +57,7 @@ The output of the build is a CRAN-like layout in the R directory.
 	if (! ("stats" %in% rownames(installed.packages()))) { install.packages("stats") }
 	if (! ("graphics" %in% rownames(installed.packages()))) { install.packages("graphics") }
 	if (! ("RCurl" %in% rownames(installed.packages()))) { install.packages("RCurl") }
-	if (! ("rjson" %in% rownames(installed.packages()))) { install.packages("rjson") }
+	if (! ("jsonlite" %in% rownames(installed.packages()))) { install.packages("jsonlite") }
 	if (! ("tools" %in% rownames(installed.packages()))) { install.packages("tools") }
 	if (! ("utils" %in% rownames(installed.packages()))) { install.packages("utils") }
 	```
@@ -166,3 +168,10 @@ Note:  As started, H2O is limited to the CRAN default of 2 CPUs.
            > h2o.shutdown(localH2O)
            > localH2O = h2o.init(nthreads = -1)
 ```
+
+#Documentation/References
+
+- [R Package Documentation](http://h2o-release.s3.amazonaws.com/h2o/latest_stable_Rdoc.html)
+- [Porting R Scripts Guide](https://github.com/h2oai/h2o-3/blob/master/h2o-docs/src/product/upgrade/H2ODevPortingRScripts.md)
+- [R FAQ](https://github.com/h2oai/h2o-3/blob/master/h2o-docs/src/product/howto/FAQ.md#r)
+- [YouTube video - Quick Start with R](https://www.youtube.com/watch?list=PLNtMya54qvOHbBdA1x8FNRSpMBEHmhxr0&v=zzV1kTCnmR0)

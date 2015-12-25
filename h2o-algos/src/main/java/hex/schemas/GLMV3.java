@@ -6,7 +6,6 @@ import hex.glm.GLMModel.GLMParameters.Solver;
 import water.api.API;
 import water.api.API.Direction;
 import water.api.API.Level;
-import water.api.FrameV3.ColSpecifierV3;
 import water.api.KeyV3.FrameKeyV3;
 import water.api.ModelParametersSchema;
 
@@ -39,6 +38,8 @@ public class GLMV3 extends ModelBuilderSchema<GLM,GLMV3,GLMV3.GLMParametersV3> {
             "lambda_search",
             "nlambdas",
             "standardize",
+            "compute_p_values",
+            "remove_collinear_columns",
             "intercept",
             "non_negative",
             "max_iterations",
@@ -59,23 +60,23 @@ public class GLMV3 extends ModelBuilderSchema<GLM,GLMV3,GLMV3.GLMParametersV3> {
     };
 
     // Input fields
-    @API(help = "Family. Use binomial for classification with logistic regression, others are for regression problems.", values = {"gaussian", "binomial", "poisson", "gamma", "tweedie"}, level = Level.critical)
+    @API(help = "Family. Use binomial for classification with logistic regression, others are for regression problems.", values = {"gaussian", "binomial","multinomial", "poisson", "gamma", "tweedie"}, level = Level.critical)
     // took tweedie out since it's not reliable
     public GLMParameters.Family family;
 
-    @API(help = "Tweedie variance power", level = Level.critical)
+    @API(help = "Tweedie variance power", level = Level.critical, gridable = true)
     public double tweedie_variance_power;
 
-    @API(help = "Tweedie link power", level = Level.critical)
+    @API(help = "Tweedie link power", level = Level.critical, gridable = true)
     public double tweedie_link_power;
 
-    @API(help = "Auto will pick solver better suited for the given dataset, in case of lambda search solvers may be changed during computation. IRLSM is fast on on problems with small number of predictors and for lambda-search with L1 penalty, L_BFGS scales better for datasets with many columns.", values = {"AUTO", "IRLSM", "L_BFGS"}, level = Level.critical)
+    @API(help = "AUTO will set the solver based on given data and the other parameters. IRLSM is fast on on problems with small number of predictors and for lambda-search with L1 penalty, L_BFGS scales better for datasets with many columns. Coordinate descent is experimental (beta).", values = {"AUTO", "IRLSM", "L_BFGS","COORDINATE_DESCENT_NAIVE", "COORDINATE_DESCENT"}, level = Level.critical)
     public Solver solver;
 
-    @API(help = "distribution of regularization between L1 and L2.", level = Level.critical)
+    @API(help = "distribution of regularization between L1 and L2.", level = Level.critical, gridable = true)
     public double[] alpha;
 
-    @API(help = "regularization strength", required = false, level = Level.critical)
+    @API(help = "regularization strength", required = false, level = Level.critical, gridable = true)
     public double[] lambda;
 
     @API(help = "use lambda search starting at lambda max, given lambda is then interpreted as lambda min", level = Level.critical)
@@ -101,6 +102,9 @@ public class GLMV3 extends ModelBuilderSchema<GLM,GLMV3,GLMV3.GLMParametersV3> {
 
     @API(help = "converge if  objective changes less (using L-infinity norm) than this, ONLY applies to L-BFGS solver", level = Level.expert)
     public double gradient_epsilon;
+
+    @API(help="likelihood divider in objective value computation, default is 1/nobs")
+    public double obj_reg;
 
     @API(help = "", level = Level.secondary, values = {"family_default", "identity", "logit", "log", "inverse", "tweedie"})
     public GLMParameters.Link link;
@@ -161,8 +165,12 @@ public class GLMV3 extends ModelBuilderSchema<GLM,GLMV3,GLMV3.GLMParametersV3> {
     @API(help = "Max. number (top K) of predictions to use for hit ratio computation (for multi-class only, 0 to disable)", level = API.Level.secondary, direction=API.Direction.INOUT)
     public int max_hit_ratio_k;
 
+    @API(help="request p-values computation, p-values work only with IRLSM solver and no regularization", level = Level.secondary, direction = Direction.INPUT)
+    public boolean compute_p_values; // _remove_collinear_columns
+
+    @API(help="in case of linearly dependent columns remove some of the dependent columns", level = Level.secondary, direction = Direction.INPUT)
+    public boolean remove_collinear_columns; // _remove_collinear_columns
+
     /////////////////////
-
-
   }
 }

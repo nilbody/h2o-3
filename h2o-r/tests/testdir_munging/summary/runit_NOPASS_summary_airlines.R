@@ -1,10 +1,12 @@
 setwd(normalizePath(dirname(R.utils::commandArgs(asValues=TRUE)$"f")))
-source('../../h2o-runit.R')
+source("../../../scripts/h2o-r-test-setup.R")
 
-test.summary.factor <- function(conn) {
+
+
+test.summary.factor <- function() {
   Log.info("Importing airlines data...\n")
   pathToData   <- normalizePath(locate("smalldata/airlines/allyears2k_headers.zip"))
-  airlines.hex <- h2o.importFile(conn, pathToData)
+  airlines.hex <- h2o.importFile(pathToData)
   airlines.dat <- as.data.frame(airlines.hex)
   
 #   Log.info("Comparing R and H2O summaries...\n")
@@ -26,7 +28,7 @@ test.summary.factor <- function(conn) {
 #   Log.info("H2O Summary:"); print(sumH2O)
 #   checkSummary(sumH2O, sumR)
   
-  testEnd()
+  
 }
 
 doTest("Summary Test: Prostate with Conversion of Cols to Factors", test.summary.factor)

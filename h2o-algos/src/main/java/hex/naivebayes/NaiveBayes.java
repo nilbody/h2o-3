@@ -36,8 +36,7 @@ public class NaiveBayes extends ModelBuilder<NaiveBayesModel,NaiveBayesParameter
 
   public boolean isSupervised(){return true;}
 
-  @Override
-  public Job<NaiveBayesModel> trainModelImpl(long work, boolean restartTimer) {
+  @Override protected Job<NaiveBayesModel> trainModelImpl(long work, boolean restartTimer) {
     return start(new NaiveBayesDriver(), work, restartTimer);
   }
 
@@ -51,8 +50,6 @@ public class NaiveBayes extends ModelBuilder<NaiveBayesModel,NaiveBayesParameter
     return new ModelCategory[]{ ModelCategory.Unknown };
   }
 
-  @Override public BuilderVisibility builderVisibility() { return BuilderVisibility.Stable; };
-
   @Override
   protected void checkMemoryFootPrint() {
     // compute memory usage for pcond matrix
@@ -64,7 +61,7 @@ public class NaiveBayes extends ModelBuilder<NaiveBayesModel,NaiveBayesParameter
     }
     mem_usage *= count;
     mem_usage *= 8; //doubles
-    long max_mem = H2O.SELF.get_max_mem();
+    long max_mem = H2O.SELF._heartbeat.get_free_mem();
     if (mem_usage > max_mem) {
       String msg = "Conditional probabilities won't fit in the driver node's memory ("
               + PrettyPrint.bytes(mem_usage) + " > " + PrettyPrint.bytes(max_mem)
@@ -84,7 +81,7 @@ public class NaiveBayes extends ModelBuilder<NaiveBayesModel,NaiveBayesParameter
   public void init(boolean expensive) {
     super.init(expensive);
     if (_response != null) {
-      if (!_response.isEnum()) error("_response", "Response must be a categorical column");
+      if (!_response.isCategorical()) error("_response", "Response must be a categorical column");
       else if (_response.isConst()) error("_response", "Response must have at least two unique categorical levels");
     }
     if (_parms._laplace < 0) error("_laplace", "Laplace smoothing must be an integer >= 0");
@@ -100,6 +97,7 @@ public class NaiveBayes extends ModelBuilder<NaiveBayesModel,NaiveBayesParameter
   private static boolean couldBeBool(Vec v) { return v != null && v.isInt() && v.min()+1==v.max(); }
 
   class NaiveBayesDriver extends H2O.H2OCountedCompleter<NaiveBayesDriver> {
+    protected NaiveBayesDriver() { super(true); } // bump driver priority
 
     public boolean computeStatsFillModel(NaiveBayesModel model, DataInfo dinfo, NBTask tsk) {
       model._output._levels = _response.domain();
@@ -184,7 +182,7 @@ public class NaiveBayes extends ModelBuilder<NaiveBayesModel,NaiveBayesParameter
       update(1, "Scoring and computing metrics on training data");
       if (_parms._compute_metrics) {
         model.score(_parms.train()).delete(); // This scores on the training data and appends a ModelMetrics
-        ModelMetricsSupervised mm = DKV.getGet(model._output._model_metrics[model._output._model_metrics.length - 1]);
+        ModelMetrics mm = ModelMetrics.getFromDKV(model,_parms.train());
         model._output._training_metrics = mm;
       }
 
@@ -192,9 +190,8 @@ public class NaiveBayes extends ModelBuilder<NaiveBayesModel,NaiveBayesParameter
       if(!isRunning(_key)) return false;
       update(1, "Scoring and computing metrics on validation data");
       if (_valid != null) {
-        Frame pred = model.score(_parms.valid()); //this appends a ModelMetrics on the validation set
-        model._output._validation_metrics = DKV.getGet(model._output._model_metrics[model._output._model_metrics.length - 1]);
-        pred.delete();
+        model.score(_parms.valid()).delete(); //this appends a ModelMetrics on the validation set
+        model._output._validation_metrics = ModelMetrics.getFromDKV(model,_parms.valid());
       }
 
       return true;
@@ -205,10 +202,11 @@ public class NaiveBayes extends ModelBuilder<NaiveBayesModel,NaiveBayesParameter
       DataInfo dinfo = null;
 
       try {
+        Scope.enter();
         init(true);   // Initialize parameters
         _parms.read_lock_frames(NaiveBayes.this); // Fetch & read-lock input frames
         if (error_count() > 0) throw H2OModelBuilderIllegalArgumentException.makeFromBuilder(NaiveBayes.this);
-        dinfo = new DataInfo(Key.make(), _train, _valid, 1, false, DataInfo.TransformType.NONE, DataInfo.TransformType.NONE, true, false, false, false, false);
+        dinfo = new DataInfo(Key.make(), _train, _valid, 1, false, DataInfo.TransformType.NONE, DataInfo.TransformType.NONE, true, false, false, false, false, false);
 
         // The model to be built
         model = new NaiveBayesModel(dest(), _parms, new NaiveBayesOutput(NaiveBayes.this));
@@ -236,6 +234,7 @@ public class NaiveBayes extends ModelBuilder<NaiveBayesModel,NaiveBayesParameter
         if (model != null) model.unlock(_key);
         if (dinfo != null) dinfo.remove();
         _parms.read_unlock_frames(NaiveBayes.this);
+        Scope.exit();
       }
       tryComplete();
     }
